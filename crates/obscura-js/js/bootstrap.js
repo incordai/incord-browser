@@ -2172,6 +2172,12 @@ globalThis.performance = globalThis.performance || {
   clearMarks(){}, clearMeasures(){}, clearResourceTimings(){},
   getEntries(){return [];}, getEntriesByName(){return [];}, getEntriesByType(){return [];},
   setResourceTimingBufferSize(){},
+  // Performance is an EventTarget in the spec (e.g.
+  // 'resourcetimingbufferfull'). Real-world RUM/perf code — often deferred
+  // via setTimeout — calls performance.addEventListener(...); without these
+  // it throws "addEventListener is not a function" and aborts the script,
+  // which can stop downstream work (e.g. price/content hydration) cold.
+  addEventListener(){}, removeEventListener(){}, dispatchEvent(){return true;},
   timeOrigin: 0,
   timing: { navigationStart: 0, domContentLoadedEventEnd: 0, loadEventEnd: 0 },
   navigation: { type: 0, redirectCount: 0 },

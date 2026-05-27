@@ -848,6 +848,65 @@ impl Page {
         self.dom.as_ref()
     }
 
+    /// Keep driving the JS event loop until the page goes quiescent — no
+    /// pending timers/microtasks AND no in-flight network — or `max` elapses,
+    /// whichever comes first.
+    ///
+    /// This is the "let the page live" primitive. The post-load settle inside
+    /// `navigate_*` is deliberately short (~500ms) so trivial fetches stay
+    /// fast, but JS-heavy pages schedule work *after* load — a common pattern
+    /// is `setTimeout(...)` → `fetch()`/XHR → DOM mutation to inject prices,
+    /// tables, or lazy content. Nothing advances that work unless the event
+    /// loop keeps being polled, so callers that want post-load JS to complete
+    /// (e.g. the CLI `--wait`) call this with a budget.
+    ///
+    /// Returns fast for pages that idle quickly (two consecutive quiescent
+    /// ticks ends it); only pages with genuinely continuous timer/network
+    /// activity consume the full `max`.
+    pub async fn run_until_idle(&mut self, max: std::time::Duration) {
+        if self.js.is_none() {
+            return;
+        }
+        let deadline = tokio::time::Instant::now() + max;
+        let mut idle_count = 0u32;
+        loop {
+            if tokio::time::Instant::now() >= deadline {
+                break;
+            }
+            if let Some(js) = &mut self.js {
+                let result = tokio::time::timeout(
+                    tokio::time::Duration::from_millis(20),
+                    js.run_event_loop(),
+                )
+                .await;
+                match result {
+                    // Event loop drained this tick. If the network is also
+                    // quiet for two consecutive checks, the page is quiescent.
+                    Ok(Ok(())) => {
+                        if self.http_client.active_requests() == 0 {
+                            idle_count += 1;
+                            if idle_count >= 2 {
+                                break;
+                            }
+                        } else {
+                            idle_count = 0;
+                        }
+                        tokio::time::sleep(tokio::time::Duration::from_millis(5)).await;
+                    }
+                    // Runtime error — stop pumping.
+                    Ok(Err(_)) => break,
+                    // Timed out: the loop still has pending work (a timer not
+                    // yet due, or a long task). Not idle — keep pumping.
+                    Err(_) => {
+                        idle_count = 0;
+                    }
+                }
+            } else {
+                break;
+            }
+        }
+    }
+
     pub fn evaluate(&mut self, expression: &str) -> serde_json::Value {
         if let Some(js) = &mut self.js {
             match js.evaluate(expression) {

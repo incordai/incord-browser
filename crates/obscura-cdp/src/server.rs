@@ -1,3 +1,36 @@
+//! Obscura CDP server.
+//!
+//! # Security / threat model
+//!
+//! The Chrome DevTools Protocol is, by design, an **unauthenticated remote-code
+//! surface**: anyone who can speak it to the browser can navigate to arbitrary
+//! URLs, read page content + cookies, run JS in pages, and (with file access)
+//! touch `file://`. Chromium's own stance is "the DevTools endpoint is as
+//! powerful as local code execution; only expose it to trusted clients."
+//!
+//! Obscura's defenses, in order:
+//!
+//! 1. **Loopback bind (default).** The listener binds `127.0.0.1` unless the
+//!    operator explicitly passes `--host`. Remote machines cannot reach it.
+//!
+//! 2. **Optional bearer token (this module).** Loopback alone does NOT stop
+//!    *local* threats: any other process on the box, or a web page in a normal
+//!    browser performing a DNS-rebinding / CSRF request to `http://localhost:<port>`,
+//!    can drive an open CDP endpoint. When `OBSCURA_CDP_TOKEN` (alias
+//!    `INCORD_CDP_TOKEN`) is set, every HTTP `/json/*` request and every
+//!    WebSocket upgrade must present it as `Authorization: Bearer <token>`
+//!    (or a `?token=<token>` query param, for WS clients that can't set
+//!    headers). Mismatches get `401` and are never forwarded to the CDP
+//!    processor. The compare is constant-time. When the var is unset, the
+//!    endpoint stays open (backward-compatible) and we log a warning.
+//!
+//! 3. **`--allow-file-access` is opt-in.** `file://` navigation is off unless
+//!    requested, and logs a warning when enabled.
+//!
+//! Operators exposing Obscura beyond a single trusted process (containers,
+//! shared hosts, any non-loopback `--host`) SHOULD set `OBSCURA_CDP_TOKEN` to a
+//! high-entropy secret and pass it on every client connection.
+
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
@@ -119,6 +152,17 @@ pub async fn start_with_host_security_and_storage(
         info!("file:// navigation enabled (--allow-file-access). Do not expose this port to untrusted networks.");
     }
 
+    // #8: optional bearer-token auth on the CDP endpoint (see module docs).
+    let cdp_token = cdp_token_from_env();
+    match (&cdp_token, ip.is_loopback()) {
+        (Some(_), _) => info!("CDP auth ENABLED (OBSCURA_CDP_TOKEN set); clients must send 'Authorization: Bearer <token>'"),
+        (None, true) => info!("CDP auth disabled (loopback bind). Set OBSCURA_CDP_TOKEN to require a token."),
+        (None, false) => warn!(
+            "CDP endpoint bound to non-loopback {} with NO token — any client that can reach this port has full browser control. Set OBSCURA_CDP_TOKEN.",
+            host
+        ),
+    }
+
     let (ws_tx, mut ws_rx) = mpsc::channel::<std::net::TcpStream>(MAX_PENDING_WS_HANDOFFS);
 
     // Dedicated accept thread: drains the kernel backlog immediately and
@@ -141,10 +185,11 @@ pub async fn start_with_host_security_and_storage(
     std::thread::Builder::new()
         .name("obscura-cdp-accept".into())
         .spawn(move || {
+            let token = cdp_token;
             for stream in std_listener.incoming() {
                 match stream {
                     Ok(stream) => {
-                        if let Err(e) = accept_dispatch(stream, port, &ws_tx) {
+                        if let Err(e) = accept_dispatch(stream, port, &ws_tx, token.as_deref()) {
                             if !format!("{}", e).contains("close") {
                                 error!("Accept dispatch error: {}", e);
                             }
@@ -194,6 +239,91 @@ pub async fn start_with_host_security_and_storage(
 const HTTP_PEEK_BUF: usize = 4096;
 const WS_PEEK_BUF: usize = 4;
 
+/// The configured CDP bearer token, if any. `OBSCURA_CDP_TOKEN` is the
+/// canonical name; `INCORD_CDP_TOKEN` is accepted as an alias. Empty/whitespace
+/// is treated as "unset" so an exported-but-blank var doesn't lock everyone out
+/// with a token nobody can match.
+fn cdp_token_from_env() -> Option<String> {
+    std::env::var("OBSCURA_CDP_TOKEN")
+        .or_else(|_| std::env::var("INCORD_CDP_TOKEN"))
+        .ok()
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+}
+
+/// Constant-time string compare — avoids leaking the token length/prefix via
+/// response timing. Length difference short-circuits to `false` (lengths are
+/// not secret), but equal-length inputs are fully compared.
+fn constant_time_eq(a: &str, b: &str) -> bool {
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
+}
+
+/// Check a peeked HTTP/WS request head for a valid bearer token.
+///
+/// Accepts either an `Authorization: Bearer <token>` header (case-insensitive
+/// header name + scheme) or a `?token=<token>` query param on the request-line
+/// target. The query-param path exists for WebSocket clients that cannot set
+/// arbitrary request headers on the upgrade.
+fn request_authorized(request_head: &str, token: &str) -> bool {
+    let mut lines = request_head.lines();
+
+    // Request line: "GET /devtools/browser?token=... HTTP/1.1"
+    if let Some(first) = lines.next() {
+        if let Some(target) = first.split_whitespace().nth(1) {
+            if let Some((_, query)) = target.split_once('?') {
+                for kv in query.split('&') {
+                    if let Some(v) = kv.strip_prefix("token=") {
+                        if constant_time_eq(v, token) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Headers: "Authorization: Bearer <token>"
+    for line in lines {
+        if let Some((name, value)) = line.split_once(':') {
+            if name.trim().eq_ignore_ascii_case("authorization") {
+                let value = value.trim();
+                let scheme_len = "bearer ".len();
+                if value.len() > scheme_len
+                    && value[..scheme_len].eq_ignore_ascii_case("bearer ")
+                    && constant_time_eq(value[scheme_len..].trim(), token)
+                {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+/// Write a `401 Unauthorized` and close. Used for both failed HTTP `/json/*`
+/// requests and failed WebSocket upgrades (the client sees the 401 instead of a
+/// switching-protocols handshake).
+fn write_http_401(mut stream: std::net::TcpStream) -> anyhow::Result<()> {
+    use std::io::Write;
+    const BODY: &str = "{\"error\":\"unauthorized: missing or invalid CDP token\"}";
+    let resp = format!(
+        "HTTP/1.1 401 Unauthorized\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {}\r\nWWW-Authenticate: Bearer\r\nConnection: close\r\n\r\n{}",
+        BODY.len(),
+        BODY,
+    );
+    stream.write_all(resp.as_bytes())?;
+    stream.flush()?;
+    Ok(())
+}
+
 /// Dispatch a freshly-accepted TCP connection on the dedicated accept thread.
 ///
 /// Peek at the first bytes to decide HTTP vs WebSocket:
@@ -205,6 +335,7 @@ fn accept_dispatch(
     stream: std::net::TcpStream,
     port: u16,
     ws_tx: &mpsc::Sender<std::net::TcpStream>,
+    token: Option<&str>,
 ) -> anyhow::Result<()> {
     let mut buf = [0u8; WS_PEEK_BUF];
     let n = stream.peek(&mut buf)?;
@@ -213,6 +344,16 @@ fn accept_dispatch(
         let mut peek_buf = [0u8; HTTP_PEEK_BUF];
         let n = stream.peek(&mut peek_buf)?;
         let line = String::from_utf8_lossy(&peek_buf[..n]);
+
+        // #8: enforce the bearer token (when configured) before routing to
+        // either the HTTP control plane or the WS upgrade. Covers both surfaces
+        // in one place because both arrive as GET requests.
+        if let Some(token) = token {
+            if !request_authorized(&line, token) {
+                warn!("rejected unauthenticated CDP connection (missing/invalid token)");
+                return write_http_401(stream);
+            }
+        }
 
         let endpoint = if line.contains("/json/version") {
             Some("version")
@@ -229,7 +370,13 @@ fn accept_dispatch(
         }
         // Fall through: GET request that isn't a /json endpoint → treat as
         // WebSocket upgrade (Chromium DevTools clients issue GET with
-        // Upgrade: websocket).
+        // Upgrade: websocket). It already passed the token check above.
+    } else if token.is_some() {
+        // Not a GET request, so it never passed the auth check and cannot be a
+        // valid WebSocket upgrade (RFC 6455 requires GET). Reject rather than
+        // forward an unauthenticated stream to the CDP processor.
+        warn!("rejected non-GET CDP connection while auth is enabled");
+        return write_http_401(stream);
     }
 
     // Try to hand off the WS stream to the LocalSet. If the bounded channel
