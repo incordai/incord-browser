@@ -74,6 +74,16 @@ enum Command {
         #[arg(long)]
         allow_file_access: bool,
 
+        /// Require this bearer token on every CDP connection (HTTP /json/*
+        /// and the WebSocket upgrade). Clients send it as
+        /// `Authorization: Bearer <token>` or `?token=<token>`. Strongly
+        /// recommended whenever --host is non-loopback. Equivalent to setting
+        /// the OBSCURA_CDP_TOKEN env var. Omit to leave the endpoint open
+        /// (loopback-only by default). The OBSCURA_CDP_TOKEN env var is also
+        /// honored directly by the server when this flag is omitted.
+        #[arg(long)]
+        token: Option<String>,
+
         #[arg(long)]
         storage_dir: Option<std::path::PathBuf>,
     },
@@ -87,6 +97,10 @@ enum Command {
         #[arg(long)]
         selector: Option<String>,
 
+        /// Max seconds to keep running post-load JS before snapshotting.
+        /// With --selector, polls until it appears (pumping the event loop).
+        /// Otherwise, lets timers/XHR/DOM-mutation settle up to this long
+        /// (pages that go idle sooner return early). 0 disables.
         #[arg(long, default_value_t = 5)]
         wait: u64,
 
@@ -98,6 +112,13 @@ enum Command {
 
         #[arg(long)]
         user_agent: Option<String>,
+
+        /// Seed a request cookie before navigating, "name=value" (repeatable).
+        /// Scoped to the fetched URL's domain. Useful to set site preferences
+        /// that change server-rendered output — e.g. Amazon's `i18n-prefs=USD`
+        /// forces the marketplace's currency regardless of the egress IP geo.
+        #[arg(long = "cookie")]
+        cookies: Vec<String>,
 
         #[arg(long)]
         stealth: bool,
@@ -261,9 +282,16 @@ async fn main() -> anyhow::Result<()> {
     let global_proxy = args.proxy.clone();
 
     match args.command {
-        Some(Command::Serve { port, host, proxy, user_agent, stealth, workers, allow_file_access, storage_dir }) => {
+        Some(Command::Serve { port, host, proxy, user_agent, stealth, workers, allow_file_access, token, storage_dir }) => {
             let proxy = merge_proxy(global_proxy.clone(), proxy);
             reject_stealth_with_socks5(proxy.as_deref(), stealth)?;
+            // The CDP server reads the token from OBSCURA_CDP_TOKEN (single
+            // source of truth). The --token flag is sugar: propagate it to the
+            // env so server.rs picks it up. (clap's `env=` already lets the env
+            // var populate the flag; this handles the explicit-flag case.)
+            if let Some(ref t) = token {
+                std::env::set_var("OBSCURA_CDP_TOKEN", t);
+            }
             print_banner(port);
             if let Some(ref dir) = storage_dir {
                 tracing::info!("Storage dir: {}", dir.display());
@@ -292,9 +320,9 @@ async fn main() -> anyhow::Result<()> {
                 ).await?;
             }
         }
-        Some(Command::Fetch { url, dump, selector, wait, timeout, wait_until, user_agent, stealth, eval, output, quiet, storage_dir }) => {
+        Some(Command::Fetch { url, dump, selector, wait, timeout, wait_until, user_agent, cookies, stealth, eval, output, quiet, storage_dir }) => {
             reject_stealth_with_socks5(global_proxy.as_deref(), stealth)?;
-            run_fetch(&url, dump, selector, wait, timeout, &wait_until, user_agent, stealth, eval, output, quiet, global_proxy, storage_dir).await?;
+            run_fetch(&url, dump, selector, wait, timeout, &wait_until, user_agent, cookies, stealth, eval, output, quiet, global_proxy, storage_dir).await?;
         }
         Some(Command::Scrape { urls, eval, concurrency, format, timeout, quiet }) => {
             run_parallel_scrape(urls, eval, concurrency.get(), &format, timeout, quiet, global_proxy).await?;
@@ -455,6 +483,7 @@ async fn run_fetch(
     timeout_secs: u64,
     wait_until: &str,
     user_agent: Option<String>,
+    cookies: Vec<String>,
     stealth: bool,
     eval: Option<String>,
     output: Option<std::path::PathBuf>,
@@ -491,6 +520,30 @@ async fn run_fetch(
         page.http_client.set_user_agent(ua).await;
     }
 
+    // Seed request cookies (--cookie "name=value") into the jar before
+    // navigating, scoped to the target URL's domain, so they're sent on the
+    // very first request. Lets callers set server-side preferences such as
+    // Amazon's `i18n-prefs=<CUR>` (force marketplace currency over egress geo).
+    if !cookies.is_empty() {
+        if let Ok(nav_url) = url::Url::parse(url_str) {
+            for c in &cookies {
+                let c = c.trim();
+                if c.is_empty() {
+                    continue;
+                }
+                // Accept "name=value" or a full Set-Cookie string; ensure a path.
+                let set_cookie = if c.contains("; ") || c.to_ascii_lowercase().contains("path=") {
+                    c.to_string()
+                } else {
+                    format!("{c}; Path=/")
+                };
+                context.cookie_jar.set_cookie(&set_cookie, &nav_url);
+            }
+        } else if !quiet {
+            eprintln!("Warning: cannot seed --cookie, invalid URL: {url_str}");
+        }
+    }
+
     let wait_condition = obscura_browser::lifecycle::WaitUntil::from_str(wait_until);
 
     if !quiet {
@@ -515,6 +568,11 @@ async fn run_fetch(
         if !found {
             eprintln!("Warning: selector '{}' not found after {}s", sel, wait_secs);
         }
+    } else if wait_secs > 0 {
+        // No selector to wait on: give post-load JS up to `--wait` seconds to
+        // finish (timers → fetch/XHR → DOM mutation, e.g. lazily-injected
+        // prices/tables). Pages that idle quickly return well before the cap.
+        page.run_until_idle(Duration::from_secs(wait_secs)).await;
     }
 
     if let Some(ref expr) = eval {
@@ -622,7 +680,11 @@ async fn wait_for_selector(page: &mut Page, selector: &str, timeout_secs: u64) -
             return false;
         }
 
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        // Drive the JS event loop between polls. Without this the page's
+        // timers/microtasks/XHR continuations never advance, so a selector
+        // that only appears after post-load JS (the common case for waiting
+        // on a selector at all) would never show up.
+        page.run_until_idle(tokio::time::Duration::from_millis(100)).await;
     }
 }
 
