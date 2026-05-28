@@ -592,6 +592,27 @@ async fn run_fetch(
         page.run_until_idle(Duration::from_secs(wait_secs)).await;
     }
 
+    // Token-captcha auto-solve (opt-in: OBSCURA_CAPTCHA_API_KEY). Detects
+    // reCAPTCHA/hCaptcha/Turnstile, solves via CapSolver/2Captcha, injects the
+    // token + submits. No-op when unconfigured or no token captcha is present.
+    // Behavioral systems (PerimeterX/DataDome) are NOT handled here.
+    if let Some(cfg) = obscura_browser::captcha::CaptchaConfig::from_env() {
+        match obscura_browser::captcha::try_solve(&mut page, url_str, &cfg).await {
+            Ok(true) => {
+                if !quiet {
+                    eprintln!("Solved token captcha; waiting for page to proceed");
+                }
+                page.run_until_idle(Duration::from_secs(wait_secs.max(5))).await;
+            }
+            Ok(false) => {}
+            Err(e) => {
+                if !quiet {
+                    eprintln!("Captcha solve failed: {e}");
+                }
+            }
+        }
+    }
+
     if let Some(ref expr) = eval {
         let result = page.evaluate(expr);
         let rendered = match result {

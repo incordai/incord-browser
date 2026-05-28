@@ -1608,6 +1608,7 @@ dependencies = [
  "obscura-dom",
  "obscura-js",
  "obscura-net",
+ "reqwest",
  "serde_json",
  "thiserror",
  "tokio",
