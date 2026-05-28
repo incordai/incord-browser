@@ -408,12 +408,14 @@ fn handle_http_json_blocking(
     let _ = stream.read(&mut buf)?;
 
     let body = match endpoint {
+        // Impersonate real Chrome (matches the stealth UA) — never advertise
+        // "Headless"/"Obscura" here, in case a detection path can read CDP.
         "version" => serde_json::to_string_pretty(&json!({
-            "Browser": "Obscura/0.1.0",
+            "Browser": "Chrome/145.0.0.0",
             "Protocol-Version": "1.3",
-            "User-Agent": "Obscura/0.1.0 (Headless Browser)",
-            "V8-Version": "N/A",
-            "WebKit-Version": "N/A",
+            "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+            "V8-Version": "14.5.0.0",
+            "WebKit-Version": "537.36",
             "webSocketDebuggerUrl": format!("ws://127.0.0.1:{}/devtools/browser", port),
         }))?,
         "list" => serde_json::to_string_pretty(&json!([{
@@ -978,10 +980,10 @@ fn fast_path_response(text: &str) -> Option<String> {
         "Browser.getVersion" => {
             Some(json!({
                 "protocolVersion": "1.3",
-                "product": "Obscura/0.1.0",
-                "revision": "0",
-                "userAgent": "Obscura/0.1.0",
-                "jsVersion": "V8",
+                "product": "Chrome/145.0.0.0",
+                "revision": "@e7a5f3c",
+                "userAgent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+                "jsVersion": "14.5.0.0",
             }))
         }
         "Browser.setDownloadBehavior" | "Browser.getWindowBounds" => {

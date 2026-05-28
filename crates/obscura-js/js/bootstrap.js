@@ -58,6 +58,8 @@ if (_origStackDesc && _origStackDesc.get) {
   });
 }
 
+// Seeded per session in __obscura_init (Date.now ^ Math.random) → each browser
+// context gets a unique-but-consistent fingerprint.
 let _fpSeed = 0;
 function _fpRand(salt) {
   let h = (_fpSeed ^ (salt || 0)) | 0;
@@ -72,19 +74,21 @@ function _fpNoise(x, y, channel) {
 var _fpCache = null;
 function _getFp() {
   if (_fpCache) return _fpCache;
+  // Linux/OpenGL ANGLE renderer strings — MUST match the Linux platform/UA.
+  // (Windows "Direct3D11/D3D11" strings on a Linux UA is an OS-mismatch tell.)
   const gpuPool = [
-    'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11)',
-    'ANGLE (NVIDIA, NVIDIA GeForce GTX 1660 SUPER Direct3D11 vs_5_0 ps_5_0, D3D11)',
-    'ANGLE (NVIDIA, NVIDIA GeForce RTX 2070 SUPER Direct3D11 vs_5_0 ps_5_0, D3D11)',
-    'ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)',
-    'ANGLE (Intel, Intel(R) Iris(R) Xe Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)',
-    'ANGLE (AMD, AMD Radeon RX 580 Direct3D11 vs_5_0 ps_5_0, D3D11)',
-    'ANGLE (AMD, AMD Radeon RX 6700 XT Direct3D11 vs_5_0 ps_5_0, D3D11)',
-    'ANGLE (NVIDIA, NVIDIA GeForce RTX 4070 Direct3D11 vs_5_0 ps_5_0, D3D11)',
-    'ANGLE (NVIDIA, NVIDIA GeForce GTX 1080 Ti Direct3D11 vs_5_0 ps_5_0, D3D11)',
-    'ANGLE (Intel, Intel(R) UHD Graphics 770 Direct3D11 vs_5_0 ps_5_0, D3D11)',
-    'ANGLE (AMD, AMD Radeon RX 5700 XT Direct3D11 vs_5_0 ps_5_0, D3D11)',
-    'ANGLE (NVIDIA, NVIDIA GeForce RTX 3080 Direct3D11 vs_5_0 ps_5_0, D3D11)',
+    'ANGLE (NVIDIA, NVIDIA GeForce RTX 3060/PCIe/SSE2, OpenGL 4.6.0)',
+    'ANGLE (NVIDIA, NVIDIA GeForce GTX 1660 SUPER/PCIe/SSE2, OpenGL 4.6.0)',
+    'ANGLE (NVIDIA, NVIDIA GeForce RTX 2070 SUPER/PCIe/SSE2, OpenGL 4.6.0)',
+    'ANGLE (Intel, Mesa Intel(R) UHD Graphics 630 (CFL GT2), OpenGL 4.6 (Core Profile))',
+    'ANGLE (Intel, Mesa Intel(R) Xe Graphics (TGL GT2), OpenGL 4.6 (Core Profile))',
+    'ANGLE (AMD, AMD Radeon RX 580 Series (polaris10, LLVM 15.0.6, DRM 3.49, 6.8.0), OpenGL 4.6)',
+    'ANGLE (AMD, AMD Radeon RX 6700 XT (navi22, LLVM 15.0.6, DRM 3.49, 6.8.0), OpenGL 4.6)',
+    'ANGLE (NVIDIA, NVIDIA GeForce RTX 4070/PCIe/SSE2, OpenGL 4.6.0)',
+    'ANGLE (NVIDIA, NVIDIA GeForce GTX 1080 Ti/PCIe/SSE2, OpenGL 4.6.0)',
+    'ANGLE (Intel, Mesa Intel(R) UHD Graphics 770 (ADL-S GT1), OpenGL 4.6 (Core Profile))',
+    'ANGLE (AMD, AMD Radeon RX 5700 XT (navi10, LLVM 15.0.6, DRM 3.49, 6.8.0), OpenGL 4.6)',
+    'ANGLE (Mesa, llvmpipe (LLVM 15.0.6, 256 bits), OpenGL 4.5 (Core Profile))',
   ];
   const gpuVendorPool = [
     'Google Inc. (NVIDIA)','Google Inc. (NVIDIA)','Google Inc. (NVIDIA)',

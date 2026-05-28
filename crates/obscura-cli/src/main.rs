@@ -26,6 +26,13 @@ struct Args {
     #[arg(long, global = true)]
     proxy: Option<String>,
 
+    /// Comma-separated proxy URLs to rotate across, per browser context (IP
+    /// rotation for scraping at volume). Each may carry auth, e.g.
+    /// `http://user:pass@host:port,socks5://host2:port`. Sets `OBSCURA_PROXIES`.
+    /// A single `--proxy` always overrides the pool.
+    #[arg(long, global = true)]
+    proxy_pool: Option<String>,
+
     #[arg(long)]
     obey_robots: bool,
 
@@ -280,6 +287,16 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let global_proxy = args.proxy.clone();
+
+    // --proxy-pool seeds OBSCURA_PROXIES before any BrowserContext is built, so
+    // ProxyPool::global() (read lazily during context construction) picks it up.
+    if let Some(pool) = args.proxy_pool.as_deref() {
+        if !pool.trim().is_empty() {
+            std::env::set_var("OBSCURA_PROXIES", pool);
+            let count = pool.split(',').filter(|s| !s.trim().is_empty()).count();
+            tracing::info!(proxies = count, "proxy pool configured (per-context rotation)");
+        }
+    }
 
     match args.command {
         Some(Command::Serve { port, host, proxy, user_agent, stealth, workers, allow_file_access, token, storage_dir }) => {

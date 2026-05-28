@@ -4,10 +4,12 @@ pub mod encoding;
 pub mod interceptor;
 pub mod robots;
 pub mod blocklist;
+pub mod proxy;
 #[cfg(feature = "stealth")]
 pub mod wreq_client;
 
 pub use client::{ObscuraHttpClient, ObscuraNetError, RequestInfo, ResourceType, Response};
+pub use proxy::ProxyPool;
 pub use cookies::{CookieInfo, CookieJar};
 pub use encoding::{decode_non_html, decode_response};
 pub use robots::RobotsCache;

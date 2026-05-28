@@ -74,9 +74,19 @@ impl BrowserContext {
             }
         }
 
+        // Per-context proxy rotation: an explicit proxy (CLI --proxy / config)
+        // always wins; otherwise rotate the next IP from the pool
+        // (OBSCURA_PROXIES). Empty pool ⇒ None ⇒ direct connection.
+        let effective_proxy = proxy_url.clone().or_else(|| {
+            let p = obscura_net::ProxyPool::global().next();
+            if let Some(ref u) = p {
+                tracing::debug!(proxy = %u, ctx = %id, "rotating egress proxy from pool");
+            }
+            p
+        });
         let mut client = ObscuraHttpClient::with_options(
             cookie_jar.clone(),
-            proxy_url.as_deref(),
+            effective_proxy.as_deref(),
         );
         if stealth {
             client.block_trackers = true;
@@ -96,7 +106,7 @@ impl BrowserContext {
             cookie_jar,
             http_client,
             user_agent: resolved_ua,
-            proxy_url,
+            proxy_url: effective_proxy,
             robots_cache: Arc::new(RobotsCache::new()),
             obey_robots: false,
             stealth,
