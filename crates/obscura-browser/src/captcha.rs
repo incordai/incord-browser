@@ -323,9 +323,283 @@ async fn solve_twocaptcha(
     anyhow::bail!("2captcha: timed out waiting for solution")
 }
 
+// ============================================================
+// Type-B: anti-bot CHALLENGE systems (cookie-returning)
+// ============================================================
+// Unlike token-widget captchas, these (AWS WAF, Cloudflare managed challenge,
+// DataDome) are full-page interstitials. The solver returns a CLEARANCE COOKIE
+// (and sometimes a User-Agent) rather than a form token; we set the cookie and
+// RE-FETCH the page. The clearance cookie is IP-bound, so CapSolver must solve
+// through the SAME egress proxy obscura uses (passed via the task `proxy` field)
+// — otherwise the cookie is invalid from our IP. Behavioral systems re-validate
+// via sensor JS, so this is best-effort (mostly reliable for AWS WAF / Cloudflare).
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChallengeKind {
+    AwsWaf,
+    Cloudflare,
+    DataDome,
+}
+
+impl ChallengeKind {
+    fn from_tag(s: &str) -> Option<Self> {
+        match s {
+            "awswaf" => Some(Self::AwsWaf),
+            "cloudflare" => Some(Self::Cloudflare),
+            "datadome" => Some(Self::DataDome),
+            _ => None,
+        }
+    }
+    fn capsolver_task_type(&self) -> &'static str {
+        match self {
+            Self::AwsWaf => "AntiAwsWafTask",
+            Self::Cloudflare => "AntiCloudflareTask",
+            Self::DataDome => "DatadomeSliderTask",
+        }
+    }
+    /// AWS WAF has a proxyless variant; Cloudflare/DataDome cookies are strictly
+    /// IP-bound and REQUIRE a proxy that matches obscura's egress.
+    fn proxyless_ok(&self) -> bool {
+        matches!(self, Self::AwsWaf)
+    }
+    /// Default clearance-cookie name when the solver returns a bare value.
+    fn cookie_name(&self) -> &'static str {
+        match self {
+            Self::AwsWaf => "aws-waf-token",
+            Self::Cloudflare => "cf_clearance",
+            Self::DataDome => "datadome",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct SolvedChallenge {
+    pub cookies: Vec<(String, String)>,
+    pub user_agent: Option<String>,
+}
+
+const DETECT_CHALLENGE_JS: &str = r#"(function(){
+  var h=(document.documentElement&&document.documentElement.outerHTML)||'';
+  var s=[];try{s=Array.from(document.querySelectorAll('script[src]')).map(function(x){return x.src;});}catch(e){}
+  var blob=h+' '+s.join(' ');
+  if(/token\.awswaf\.com|AwsWafIntegration|awswaf/i.test(blob)) return 'awswaf';
+  if(/cdn-cgi\/challenge-platform|_cf_chl_opt/i.test(blob)) return 'cloudflare';
+  if(/captcha-delivery\.com|datadome/i.test(blob)) return 'datadome';
+  return null;
+})()"#;
+
+/// Detect a type-B anti-bot challenge interstitial on the current page.
+pub fn detect_challenge(page: &mut Page) -> Option<ChallengeKind> {
+    match page.evaluate(DETECT_CHALLENGE_JS) {
+        Value::String(s) => ChallengeKind::from_tag(&s),
+        _ => None,
+    }
+}
+
+/// Convert obscura's `scheme://user:pass@host:port` proxy URL to CapSolver's
+/// `scheme:host:port[:user:pass]` proxy string.
+fn capsolver_proxy(proxy_url: &str) -> Option<String> {
+    let u = url::Url::parse(proxy_url).ok()?;
+    let scheme = match u.scheme() {
+        "socks5" | "socks5h" => "socks5",
+        _ => "http",
+    };
+    let host = u.host_str()?;
+    let port = u.port()?;
+    let user = u.username();
+    if user.is_empty() {
+        Some(format!("{scheme}:{host}:{port}"))
+    } else {
+        let pass = u.password().unwrap_or("");
+        Some(format!("{scheme}:{host}:{port}:{user}:{pass}"))
+    }
+}
+
+/// Pull clearance cookie(s) + optional UA out of a CapSolver `solution` object,
+/// tolerating the several shapes the API uses (`cookie` as `"n=v"` / bare value /
+/// `"n=v; n=v"`, a `cookies` object/string, or a bare `token`).
+fn extract_clearance(solution: &Value, kind: ChallengeKind) -> SolvedChallenge {
+    let user_agent = solution
+        .get("userAgent")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let mut cookies = Vec::new();
+    let default = kind.cookie_name();
+    let parse_str = |s: &str, out: &mut Vec<(String, String)>| {
+        for part in s.split(';') {
+            let p = part.trim();
+            if p.is_empty() {
+                continue;
+            }
+            match p.split_once('=') {
+                Some((n, v)) => out.push((n.trim().to_string(), v.trim().to_string())),
+                None => out.push((default.to_string(), p.to_string())),
+            }
+        }
+    };
+    if let Some(c) = solution.get("cookie").and_then(|v| v.as_str()) {
+        parse_str(c, &mut cookies);
+    } else if let Some(obj) = solution.get("cookies").and_then(|v| v.as_object()) {
+        for (k, v) in obj {
+            if let Some(s) = v.as_str() {
+                cookies.push((k.clone(), s.to_string()));
+            }
+        }
+    } else if let Some(s) = solution.get("cookies").and_then(|v| v.as_str()) {
+        parse_str(s, &mut cookies);
+    } else if let Some(t) = solution.get("token").and_then(|v| v.as_str()) {
+        cookies.push((default.to_string(), t.to_string()));
+    }
+    SolvedChallenge { cookies, user_agent }
+}
+
+/// Solve a type-B challenge via CapSolver. `proxy` (obscura's egress) is passed
+/// through so the clearance cookie is valid from our IP.
+async fn solve_challenge(
+    cfg: &CaptchaConfig,
+    kind: ChallengeKind,
+    page_url: &str,
+    proxy: Option<&str>,
+) -> anyhow::Result<SolvedChallenge> {
+    let mut task = json!({ "websiteURL": page_url });
+    match proxy {
+        Some(p) => {
+            task["type"] = json!(kind.capsolver_task_type());
+            let cs = capsolver_proxy(p)
+                .ok_or_else(|| anyhow::anyhow!("invalid proxy URL for CapSolver: {p}"))?;
+            task["proxy"] = json!(cs);
+        }
+        None if kind.proxyless_ok() => {
+            task["type"] = json!(format!("{}ProxyLess", kind.capsolver_task_type()));
+        }
+        None => anyhow::bail!(
+            "{kind:?} needs a proxy (cookie is IP-bound) — set OBSCURA_PROXIES so obscura \
+             and CapSolver share an egress IP"
+        ),
+    }
+
+    let client = http_client();
+    let create = client
+        .post("https://api.capsolver.com/createTask")
+        .json(&json!({ "clientKey": cfg.api_key, "task": task }))
+        .send()
+        .await?
+        .json::<Value>()
+        .await?;
+    if create.get("errorId").and_then(|v| v.as_i64()).unwrap_or(0) != 0 {
+        anyhow::bail!(
+            "capsolver createTask: {}",
+            create.get("errorDescription").and_then(|v| v.as_str()).unwrap_or("unknown")
+        );
+    }
+    let task_id = create
+        .get("taskId")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow::anyhow!("capsolver: no taskId"))?
+        .to_string();
+
+    for _ in 0..40 {
+        tokio::time::sleep(Duration::from_secs(3)).await;
+        let res = client
+            .post("https://api.capsolver.com/getTaskResult")
+            .json(&json!({ "clientKey": cfg.api_key, "taskId": task_id }))
+            .send()
+            .await?
+            .json::<Value>()
+            .await?;
+        if res.get("errorId").and_then(|v| v.as_i64()).unwrap_or(0) != 0 {
+            anyhow::bail!(
+                "capsolver getTaskResult: {}",
+                res.get("errorDescription").and_then(|v| v.as_str()).unwrap_or("unknown")
+            );
+        }
+        if res.get("status").and_then(|v| v.as_str()) == Some("ready") {
+            let sol = res.get("solution").cloned().unwrap_or_default();
+            let solved = extract_clearance(&sol, kind);
+            if solved.cookies.is_empty() {
+                anyhow::bail!("capsolver: solution had no clearance cookie");
+            }
+            return Ok(solved);
+        }
+    }
+    anyhow::bail!("capsolver: timed out waiting for challenge solution")
+}
+
+/// Full type-B flow: detect challenge → solve (CapSolver, via obscura's proxy) →
+/// set the clearance cookie(s) + UA on the context. Returns `Ok(true)` when a
+/// clearance cookie was set (caller must RE-NAVIGATE to load real content),
+/// `Ok(false)` when no challenge is present.
+pub async fn try_solve_challenge(page: &mut Page, cfg: &CaptchaConfig) -> anyhow::Result<bool> {
+    let Some(kind) = detect_challenge(page) else {
+        return Ok(false);
+    };
+    if cfg.provider != Provider::CapSolver {
+        tracing::warn!(?kind, "type-B challenge solving requires the CapSolver provider; skipping");
+        return Ok(false);
+    }
+    let page_url = page.url_string();
+    let proxy = page.context.proxy_url.clone();
+    tracing::info!(?kind, "anti-bot challenge detected — solving via CapSolver");
+    let solved = solve_challenge(cfg, kind, &page_url, proxy.as_deref()).await?;
+    if let Ok(nav_url) = url::Url::parse(&page_url) {
+        for (name, value) in &solved.cookies {
+            page.context
+                .cookie_jar
+                .set_cookie(&format!("{name}={value}; Path=/"), &nav_url);
+        }
+    }
+    if let Some(ua) = &solved.user_agent {
+        page.http_client.set_user_agent(ua).await;
+    }
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn challenge_task_types_and_proxy_rules() {
+        assert_eq!(ChallengeKind::AwsWaf.capsolver_task_type(), "AntiAwsWafTask");
+        assert_eq!(ChallengeKind::Cloudflare.capsolver_task_type(), "AntiCloudflareTask");
+        assert!(ChallengeKind::AwsWaf.proxyless_ok());
+        assert!(!ChallengeKind::Cloudflare.proxyless_ok());
+        assert_eq!(ChallengeKind::from_tag("awswaf"), Some(ChallengeKind::AwsWaf));
+        assert_eq!(ChallengeKind::from_tag("nope"), None);
+    }
+
+    #[test]
+    fn capsolver_proxy_formats() {
+        assert_eq!(
+            capsolver_proxy("http://user:pass@1.2.3.4:8080").as_deref(),
+            Some("http:1.2.3.4:8080:user:pass")
+        );
+        assert_eq!(
+            capsolver_proxy("http://1.2.3.4:8080").as_deref(),
+            Some("http:1.2.3.4:8080")
+        );
+        assert_eq!(
+            capsolver_proxy("socks5://u:p@host.net:1080").as_deref(),
+            Some("socks5:host.net:1080:u:p")
+        );
+    }
+
+    #[test]
+    fn extract_clearance_handles_shapes() {
+        // bare value
+        let s = extract_clearance(&json!({"cookie":"abc123"}), ChallengeKind::AwsWaf);
+        assert_eq!(s.cookies, vec![("aws-waf-token".to_string(), "abc123".to_string())]);
+        // name=value with UA
+        let s = extract_clearance(
+            &json!({"cookie":"cf_clearance=XYZ","userAgent":"UA/1"}),
+            ChallengeKind::Cloudflare,
+        );
+        assert_eq!(s.cookies, vec![("cf_clearance".to_string(), "XYZ".to_string())]);
+        assert_eq!(s.user_agent.as_deref(), Some("UA/1"));
+        // cookies object
+        let s = extract_clearance(&json!({"cookies":{"datadome":"DD1"}}), ChallengeKind::DataDome);
+        assert_eq!(s.cookies, vec![("datadome".to_string(), "DD1".to_string())]);
+    }
 
     #[test]
     fn kind_maps_response_field_and_task_types() {

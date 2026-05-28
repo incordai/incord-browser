@@ -597,6 +597,7 @@ async fn run_fetch(
     // token + submits. No-op when unconfigured or no token captcha is present.
     // Behavioral systems (PerimeterX/DataDome) are NOT handled here.
     if let Some(cfg) = obscura_browser::captcha::CaptchaConfig::from_env() {
+        // Token-widget captchas: solve → inject token → submit.
         match obscura_browser::captcha::try_solve(&mut page, url_str, &cfg).await {
             Ok(true) => {
                 if !quiet {
@@ -608,6 +609,29 @@ async fn run_fetch(
             Err(e) => {
                 if !quiet {
                     eprintln!("Captcha solve failed: {e}");
+                }
+            }
+        }
+        // Type-B anti-bot challenges (AWS WAF / Cloudflare / DataDome): solve →
+        // set the clearance cookie (via obscura's egress proxy) → RE-FETCH so the
+        // real content loads with the cookie attached.
+        match obscura_browser::captcha::try_solve_challenge(&mut page, &cfg).await {
+            Ok(true) => {
+                if !quiet {
+                    eprintln!("Solved anti-bot challenge; re-fetching with clearance cookie");
+                }
+                let wc = obscura_browser::lifecycle::WaitUntil::from_str(wait_until);
+                let _ = timeout(
+                    Duration::from_secs(timeout_secs),
+                    page.navigate_with_wait(url_str, wc),
+                )
+                .await;
+                page.run_until_idle(Duration::from_secs(wait_secs.max(3))).await;
+            }
+            Ok(false) => {}
+            Err(e) => {
+                if !quiet {
+                    eprintln!("Challenge solve failed: {e}");
                 }
             }
         }
