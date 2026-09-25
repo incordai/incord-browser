@@ -7337,19 +7337,31 @@ fn collect_web_fonts(
     let mut fonts = Vec::new();
     let mut rules = Vec::new();
 
+    // Author sheets in document order: a `<style>` element's own text plus
+    // any stylesheets it imported, and fetched `<link rel=stylesheet>` sheets
+    // (Google Fonts and other CSS-delivered web fonts). Fetched sheets were
+    // rebased to their own URL, so their relative font URLs are absolute.
+    let external = tree.external_stylesheets();
+    let mut sheets: Vec<String> = Vec::new();
     for nid in crate::dom::rendered_descendants(tree, tree.document()) {
         let Some(node) = tree.get_node(nid) else {
             continue;
         };
-        if node
-            .as_element()
-            .map(|element| element.local.as_ref() != "style")
-            .unwrap_or(true)
-        {
+        let Some(local) = node.as_element().map(|element| element.local.to_string()) else {
+            continue;
+        };
+        if local != "style" && local != "link" {
             continue;
         }
-        let css = tree.text_content(nid);
-        for face in font_face_blocks(&css) {
+        if local == "style" {
+            sheets.push(tree.text_content(nid));
+        }
+        if let Some(sheet) = external.get(&nid) {
+            sheets.extend(sheet.sources.iter().map(|source| source.to_string()));
+        }
+    }
+    for css in &sheets {
+        for face in font_face_blocks(css) {
             if !font_face_covers_ascii(face) {
                 continue;
             }
