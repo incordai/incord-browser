@@ -1,10 +1,10 @@
-The `obscura` crate embeds the engine in a Rust program with a `Browser` / `Page` / `Element` API plus a cookie store, no CDP round-trips. It builds V8 from source, so it is a git dependency rather than a crates.io release.
+The `incord-browser` crate embeds the engine in a Rust program with a `Browser` / `Page` / `Element` API plus a cookie store, no CDP round-trips. It builds V8 from source, so it is a git dependency rather than a crates.io release.
 
 ## Add the dependency
 
 ```toml
 [dependencies]
-obscura = { git = "https://github.com/h4ckf0r0day/obscura" }
+obscura = { git = "https://github.com/incordai/incord-browser" }
 tokio = { version = "1", features = ["rt", "macros"] }
 anyhow = "1"
 ```
@@ -12,7 +12,7 @@ anyhow = "1"
 The first build compiles V8 from source, so it is slow and needs the same build tools as [Build from source](Build-from-source.md). Pin a tag for reproducible builds:
 
 ```toml
-obscura = { git = "https://github.com/h4ckf0r0day/obscura", tag = "v0.1.7" }
+obscura = { git = "https://github.com/incordai/incord-browser", tag = "v0.1.7" }
 ```
 
 ## Quickstart

@@ -5,7 +5,7 @@ SUITE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SUITE_DIR/../.." && pwd)"
 PAIRED_CORPUS="$REPO_ROOT/render-repros/paired-corpus.py"
 SITES="$SUITE_DIR/sites.txt"
-OBSCURA="${OBSCURA_BIN:-$REPO_ROOT/target/release/obscura}"
+OBSCURA="${OBSCURA_BIN:-$REPO_ROOT/target/release/incord-browser}"
 PYTHON="${PYTHON_BIN:-python3}"
 
 usage() {

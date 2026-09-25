@@ -6,7 +6,7 @@ use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
-const OBSCURA: &str = env!("CARGO_BIN_EXE_obscura");
+const OBSCURA: &str = env!("CARGO_BIN_EXE_incord-browser");
 const TEST_PAGE: &str = r#"<!doctype html><html><head><title>Example Domain</title></head>
 <body><h1>Example Domain</h1><p>Deterministic local MCP fixture.</p>
 <a href="/more">More information...</a></body></html>"#;
@@ -205,7 +205,7 @@ fn test_initialize() {
         }),
     );
     assert_eq!(resp["result"]["protocolVersion"], "2024-11-05");
-    assert_eq!(resp["result"]["serverInfo"]["name"], "obscura-mcp");
+    assert_eq!(resp["result"]["serverInfo"]["name"], "incord-browser-mcp");
 }
 
 #[test]

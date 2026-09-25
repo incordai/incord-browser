@@ -121,4 +121,4 @@ Built-in: `--stealth` ships with a tracker blocklist that handles most of these 
 
 ## From the Rust library
 
-The patterns above drive interception over CDP from Puppeteer or Playwright. If you embed the engine with the `obscura` crate, the same capability is a native API on `Page`: `on_request` / `on_response` callbacks, an `enable_interception()` channel that can block, mock, or rewrite requests, and `add_preload_script` to run code before the page's own scripts. See [Use as a Rust library](Use-as-a-Rust-library.md#intercept-requests).
+The patterns above drive interception over CDP from Puppeteer or Playwright. If you embed the engine with the `incord-browser` crate, the same capability is a native API on `Page`: `on_request` / `on_response` callbacks, an `enable_interception()` channel that can block, mock, or rewrite requests, and `add_preload_script` to run code before the page's own scripts. See [Use as a Rust library](Use-as-a-Rust-library.md#intercept-requests).

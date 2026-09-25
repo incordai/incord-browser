@@ -9,7 +9,7 @@ const INLINE_TEXT_URL: &str = "data:text/html,\
 
 #[test]
 fn dump_text_preserves_whitespace_between_inline_spans() {
-    let output = Command::new(env!("CARGO_BIN_EXE_obscura"))
+    let output = Command::new(env!("CARGO_BIN_EXE_incord-browser"))
         .args([
             "fetch",
             INLINE_TEXT_URL,

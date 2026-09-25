@@ -307,7 +307,7 @@ fn handle_initialize(id: Value, params: &Value) -> RpcResponse {
             "tools": {}
         },
         "serverInfo": {
-            "name": "obscura-mcp",
+            "name": "incord-browser-mcp",
             // Same build version the CLI reports (tag-derived at release time),
             // so MCP clients see the version the binary was actually cut from.
             "version": env!("OBSCURA_BUILD_VERSION")

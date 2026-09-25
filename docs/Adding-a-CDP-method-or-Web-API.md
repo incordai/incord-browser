@@ -132,7 +132,7 @@ sha2 = "0.10"
 
 ```bash
 cargo build --release --features render
-./target/release/obscura fetch https://example.com --eval "
+./target/release/incord-browser fetch https://example.com --eval "
   crypto.subtle.digest('SHA-256', new TextEncoder().encode('hi'))
     .then(buf => Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join(''))
 "

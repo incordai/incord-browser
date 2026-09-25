@@ -1,15 +1,15 @@
 # Watch agent sessions live
 
-Obscura is headless, so an agent driving it through MCP, Puppeteer, or Playwright works invisibly. The CDP screencast surface lets you stream what the browser sees to a local tab while the agent works, which helps when supervising long tasks or debugging what an agent clicked.
+Incord Browser is headless, so an agent driving it through MCP, Puppeteer, or Playwright works invisibly. The CDP screencast surface lets you stream what the browser sees to a local tab while the agent works, which helps when supervising long tasks or debugging what an agent clicked.
 
-This guide builds a small live viewer on top of `obscura serve`. It uses only Node's built-in modules and its native WebSocket client (Node 21+).
+This guide builds a small live viewer on top of `incord-browser serve`. It uses only Node's built-in modules and its native WebSocket client (Node 21+).
 
 ## How it works
 
 1. Start the CDP server:
 
 ```bash
-obscura serve --port 9222
+incord-browser serve --port 9222
 ```
 
 2. Run the viewer script below:
@@ -38,7 +38,7 @@ let ws = null;
 const page = `
 <!doctype html>
 <html>
-<head><meta charset="utf-8"><title>Obscura live</title>
+<head><meta charset="utf-8"><title>Incord Browser live</title>
 <style>body{margin:0;background:#111;display:grid;place-items:center;height:100vh}
 img{max-width:100%;max-height:100%}</style></head>
 <body><img id="s" alt="live page">
@@ -170,8 +170,8 @@ connect().catch(retry);
 
 ## Verifying
 
-With `obscura serve` running and the viewer open:
+With `incord-browser serve` running and the viewer open:
 
-1. Navigate from another client, for example `obscura fetch https://example.com` through a separate worker, or any Puppeteer/Playwright/MCP session connected to port 9222.
+1. Navigate from another client, for example `incord-browser fetch https://example.com` through a separate worker, or any Puppeteer/Playwright/MCP session connected to port 9222.
 2. The tab shows the page within a second of it painting.
 3. Closing the viewer tab and reopening it resumes from the most recent frame.

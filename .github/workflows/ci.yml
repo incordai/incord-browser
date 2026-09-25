@@ -151,7 +151,7 @@ jobs:
         run: cargo nextest run --release --features render --no-fail-fast
 
       - name: Stage candidate binary for comparison
-        run: install -D -m 0755 target/release/obscura "$RUNNER_TEMP/obscura-ci/obscura-pr"
+        run: install -D -m 0755 target/release/incord-browser "$RUNNER_TEMP/obscura-ci/obscura-pr"
 
       - name: Build render and stealth release
         run: cargo build --release -p obscura-cli --bins --features render,stealth
@@ -255,9 +255,11 @@ jobs:
             CARGO_TARGET_DIR="$RUNNER_TEMP/obscura-base-target" \
               cargo build --release -p obscura-cli --bins --features render
           )
-          install -D -m 0755 \
-            "$RUNNER_TEMP/obscura-base-target/release/obscura" \
-            "$RUNNER_TEMP/obscura-ci/obscura-base"
+          # The binary was renamed from obscura to incord-browser; a base
+          # revision from before the rename still builds the old name.
+          base_bin="$RUNNER_TEMP/obscura-base-target/release/incord-browser"
+          [ -f "$base_bin" ] || base_bin="$RUNNER_TEMP/obscura-base-target/release/obscura"
+          install -D -m 0755 "$base_bin" "$RUNNER_TEMP/obscura-ci/obscura-base"
           chmod 0755 "$RUNNER_TEMP/obscura-ci/obscura-pr"
 
       - name: Run base and candidate obstacle courses

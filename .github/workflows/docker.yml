@@ -40,8 +40,8 @@ jobs:
           build-args: |
             OBSCURA_VERSION=${{ steps.version.outputs.version }}
           tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/obscura:${{ steps.version.outputs.version }}
-            ${{ secrets.DOCKERHUB_USERNAME }}/obscura:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/incord-browser:${{ steps.version.outputs.version }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/incord-browser:latest
           platforms: linux/amd64,linux/arm64
           cache-from: type=gha
           cache-to: type=gha,mode=max

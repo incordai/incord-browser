@@ -8,7 +8,7 @@ const PAGE: &str = "data:text/html,<p style=\"font-family:Liberation Mono\">font
 fn fetch_accepts_font_dir_for_screenshots() {
     let out = std::env::temp_dir().join(format!("obscura-fetch-font-dir-{}.png", std::process::id()));
     let fonts = concat!(env!("CARGO_MANIFEST_DIR"), "/../obscura-render/assets");
-    let status = Command::new(env!("CARGO_BIN_EXE_obscura"))
+    let status = Command::new(env!("CARGO_BIN_EXE_incord-browser"))
         .args(["fetch", PAGE, "--font-dir", fonts, "--screenshot"])
         .arg(&out)
         .args(["--wait", "0", "--timeout", "10", "--quiet"])
@@ -22,7 +22,7 @@ fn fetch_accepts_font_dir_for_screenshots() {
 
 #[test]
 fn fetch_rejects_a_missing_font_dir() {
-    let status = Command::new(env!("CARGO_BIN_EXE_obscura"))
+    let status = Command::new(env!("CARGO_BIN_EXE_incord-browser"))
         .args(["fetch", PAGE, "--font-dir", "/definitely/not/a/font/dir", "--quiet"])
         .output()
         .expect("run obscura fetch");

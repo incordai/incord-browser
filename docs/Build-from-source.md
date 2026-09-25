@@ -9,12 +9,12 @@ First build takes about 5 minutes. Incremental builds are seconds.
 ## Build
 
 ```bash
-git clone https://github.com/h4ckf0r0day/obscura.git
-cd obscura
+git clone https://github.com/incordai/incord-browser.git
+cd incord-browser
 cargo build --release -p obscura-cli --bins --features render
 ```
 
-Binary is at `./target/release/obscura`.
+Binary is at `./target/release/incord-browser`.
 
 This produces the release binary with geometry, screenshots, screencasting,
 and PDF export.
@@ -74,8 +74,8 @@ Uses the system OpenSSL instead.
 ## Run from the build
 
 ```bash
-./target/release/obscura --version
-./target/release/obscura fetch https://example.com --eval "document.title"
+./target/release/incord-browser --version
+./target/release/incord-browser fetch https://example.com --eval "document.title"
 ```
 
 Install system-wide:

@@ -1,7 +1,7 @@
 `--dump markdown` converts the rendered page to markdown.
 
 ```bash
-obscura fetch https://example.com --dump markdown
+incord-browser fetch https://example.com --dump markdown
 ```
 
 ## What gets converted
@@ -26,13 +26,13 @@ obscura fetch https://example.com --dump markdown
 ## Save to file
 
 ```bash
-obscura fetch https://docs.example.com/page --dump markdown -o page.md
+incord-browser fetch https://docs.example.com/page --dump markdown -o page.md
 ```
 
 ## For RAG / LLM context
 
 ```bash
-obscura fetch https://docs.example.com/page --dump markdown --quiet
+incord-browser fetch https://docs.example.com/page --dump markdown --quiet
 ```
 
 `--quiet` strips info logging so the output is just markdown.
@@ -42,7 +42,7 @@ obscura fetch https://docs.example.com/page --dump markdown --quiet
 For pages that render content client-side:
 
 ```bash
-obscura fetch https://my-spa.example --wait-until load --dump markdown
+incord-browser fetch https://my-spa.example --wait-until load --dump markdown
 ```
 
 ## Narrow to a region
@@ -50,8 +50,8 @@ obscura fetch https://my-spa.example --wait-until load --dump markdown
 `--selector` restricts the conversion to a CSS selector:
 
 ```bash
-obscura fetch https://example.com --selector "main" --dump markdown
-obscura fetch https://example.com --selector "article.post" --dump markdown
+incord-browser fetch https://example.com --selector "main" --dump markdown
+incord-browser fetch https://example.com --selector "article.post" --dump markdown
 ```
 
 Useful for skipping nav, sidebars, and footers.

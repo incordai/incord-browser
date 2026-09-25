@@ -30,20 +30,20 @@ RUN for crate in obscura-dom obscura-net obscura-browser obscura-cdp obscura-js 
     echo "fn main() {}" > crates/obscura-cli/src/main.rs && \
     echo "fn main() {}" > crates/obscura-cli/src/worker.rs
 
-RUN cargo build --release --features render --bin obscura --bin obscura-worker 2>/dev/null || true
+RUN cargo build --release --features render --bin incord-browser --bin incord-browser-worker 2>/dev/null || true
 
 ARG OBSCURA_VERSION
 
 # Copy real sources and build
 COPY crates/ crates/
-RUN echo "Building Obscura version ${OBSCURA_VERSION:-from Cargo.toml}" && \
-    touch crates/*/src/*.rs && cargo build --release --features render --bin obscura --bin obscura-worker
+RUN echo "Building Incord Browser version ${OBSCURA_VERSION:-from Cargo.toml}" && \
+    touch crates/*/src/*.rs && cargo build --release --features render --bin incord-browser --bin incord-browser-worker
 
 # ---
 
 # distroless/cc: glibc + libgcc + CA certs only — no shell, no package manager.
 #
-# `:nonroot` runs as uid/gid 65532 instead of root. Obscura executes untrusted
+# `:nonroot` runs as uid/gid 65532 instead of root. Incord Browser executes untrusted
 # page JavaScript in-process through V8, so a V8 exploit lands with the
 # process's privileges; there is no reason for those to be root's. The image
 # needs no privileged operation: it binds an unprivileged port, reads the CA
@@ -55,8 +55,8 @@ RUN echo "Building Obscura version ${OBSCURA_VERSION:-from Cargo.toml}" && \
 # *base* image trades a real ongoing risk for a theoretical one.
 FROM gcr.io/distroless/cc-debian12:nonroot
 
-COPY --from=builder /build/target/release/obscura /obscura
-COPY --from=builder /build/target/release/obscura-worker /obscura-worker
+COPY --from=builder /build/target/release/incord-browser /incord-browser
+COPY --from=builder /build/target/release/incord-browser-worker /incord-browser-worker
 
 EXPOSE 9222
 
@@ -66,5 +66,5 @@ EXPOSE 9222
 # OBSCURA_CDP_TOKEN; publish to host loopback as an additional boundary.
 # The native binary still defaults to 127.0.0.1.
 #
-ENTRYPOINT ["/obscura"]
+ENTRYPOINT ["/incord-browser"]
 CMD ["serve", "--port", "9222", "--host", "0.0.0.0"]

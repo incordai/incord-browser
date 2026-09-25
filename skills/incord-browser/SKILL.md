@@ -1,11 +1,11 @@
 ---
-name: obscura
-description: Operate and validate Obscura for JavaScript page loading, stealth browsing, anti-fingerprinting, tracker blocking, screenshots and visual comparison, CDP automation with Puppeteer or Playwright, screencasting, PDF export, MCP browser interaction, and web extraction. Use when running Obscura against deterministic fixtures or real sites, diagnosing rendering, geometry, resource, identity, or transport failures, or choosing the correct CLI, CDP, MCP, rendering, or stealth workflow.
+name: incord-browser
+description: Operate and validate Incord Browser for JavaScript page loading, stealth browsing, anti-fingerprinting, tracker blocking, screenshots and visual comparison, CDP automation with Puppeteer or Playwright, screencasting, PDF export, MCP browser interaction, and web extraction. Use when running Incord Browser against deterministic fixtures or real sites, diagnosing rendering, geometry, resource, identity, or transport failures, or choosing the correct CLI, CDP, MCP, rendering, or stealth workflow.
 ---
 
-# Obscura
+# Incord Browser
 
-Use Obscura as a lightweight, stealth-capable Rust headless browser for
+Use Incord Browser as a lightweight, stealth-capable Rust headless browser for
 automation. It embeds V8, owns the DOM and rendering pipeline, and exposes
 Chrome DevTools Protocol workflows without launching Chromium. Treat rendering
 and stealth as first-class, complementary capabilities.
@@ -33,7 +33,7 @@ CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=2 cargo build --release -p obscura-cli --bi
 CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=2 cargo build --release -p obscura-cli --bins --no-default-features --features stealth
 ```
 
-Use `./target/release/obscura` in the commands below when working from source.
+Use `./target/release/incord-browser` in the commands below when working from source.
 
 ## Use stealth
 
@@ -47,8 +47,8 @@ Enable stealth at runtime with the global `--stealth` flag. It applies to
 `fetch`, `serve`, `scrape`, and `mcp`, before or after the subcommand:
 
 ```bash
-obscura --stealth fetch https://example.com --screenshot page.png
-obscura serve --stealth --port 9222
+incord-browser --stealth fetch https://example.com --screenshot page.png
+incord-browser serve --stealth --port 9222
 ```
 
 The runtime flag needs a `render,stealth` build for the wreq/BoringSSL transport.
@@ -56,10 +56,10 @@ The runtime flag needs a `render,stealth` build for the wreq/BoringSSL transport
 ## Fetch, evaluate, and capture
 
 ```bash
-obscura fetch https://example.com --dump text
-obscura fetch https://example.com --eval "document.title"
-obscura fetch https://example.com --screenshot page.png
-obscura fetch https://example.com \
+incord-browser fetch https://example.com --dump text
+incord-browser fetch https://example.com --eval "document.title"
+incord-browser fetch https://example.com --screenshot page.png
+incord-browser fetch https://example.com \
   --eval "window.scrollTo(0, document.documentElement.scrollHeight)" \
   --screenshot bottom.png
 ```
@@ -78,7 +78,7 @@ does not require one screenshot per URL.
 Start the server:
 
 ```bash
-obscura serve --port 9222
+incord-browser serve --port 9222
 ```
 
 Connect Puppeteer with `puppeteer-core` or Playwright with
@@ -98,7 +98,7 @@ outlines, headers/footers, or complete CSS paged-media behavior.
 
 ## Drive MCP
 
-Run `obscura mcp` for stdio or `obscura mcp --http --port 3000` for HTTP.
+Run `incord-browser mcp` for stdio or `incord-browser mcp --http --port 3000` for HTTP.
 Navigate first, then inspect or interact with the current page. Refresh a
 snapshot or interactive-element listing after navigation, clicking, scrolling,
 or a framework rerender because element references may have changed.
@@ -122,7 +122,7 @@ fixture. Do not introduce hostname-specific rendering logic.
 
 ## Set expectations accurately
 
-Obscura supports many common layout and paint paths but is not a bundled Chrome
+Incord Browser supports many common layout and paint paths but is not a bundled Chrome
 build. Long-tail CSS, service workers, some Web APIs, native media, GPU or
 compositor effects, PDF structure, and platform font rasterization can differ
 from Chromium. Preserve the project's existing positioning and published

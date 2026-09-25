@@ -1,4 +1,4 @@
-Obscura is a workspace of nine crates.
+Incord Browser is a workspace of nine crates.
 
 ```
 obscura-cli       CLI entry point. fetch, serve, scrape, mcp.
@@ -45,7 +45,7 @@ The dispatcher emits CDP events (`Network.requestWillBeSent`, `Page.frameNavigat
 ## Rendering flow
 
 `obscura-render` consumes the shared DOM and computed style state. Taffy
-provides the flex/grid foundation; Obscura adds browser formatting behavior,
+provides the flex/grid foundation; Incord Browser adds browser formatting behavior,
 text shaping, intrinsic replaced-element sizing, retained geometry, scrolling,
 and CPU-backed paint. `obscura-js` exposes renderer-owned geometry to DOM APIs,
 `obscura-browser` prepares resources and owns capture, and `obscura-cdp` maps

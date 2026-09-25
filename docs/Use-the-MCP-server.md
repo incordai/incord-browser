@@ -1,29 +1,29 @@
-`obscura mcp` exposes obscura as a Model Context Protocol server so MCP-capable clients (Claude Desktop, Claude Code, etc.) can drive it.
+`incord-browser mcp` exposes Incord Browser as a Model Context Protocol server so MCP-capable clients (Claude Desktop, Claude Code, etc.) can drive it.
 
 ## Run
 
 Stdio (default, for direct client integration):
 
 ```bash
-obscura mcp
+incord-browser mcp
 ```
 
 HTTP (for remote or shared use):
 
 ```bash
-obscura mcp --http --port 3000
+incord-browser mcp --http --port 3000
 ```
 
 The HTTP transport binds `127.0.0.1` by default. Bind all interfaces with `--host` for a container or sidecar deployment:
 
 ```bash
-obscura mcp --http --host 0.0.0.0 --port 3000
+incord-browser mcp --http --host 0.0.0.0 --port 3000
 ```
 
 With stealth and proxy:
 
 ```bash
-obscura mcp --stealth --proxy http://proxy.example.com:8080
+incord-browser mcp --stealth --proxy http://proxy.example.com:8080
 ```
 
 ## Security
@@ -37,7 +37,7 @@ The HTTP transport exposes a privileged browser session. Its guards are:
 ```bash
 OBSCURA_MCP_TOKEN="$(openssl rand -hex 32)" \
 OBSCURA_MCP_ALLOWED_ORIGINS="https://app.example.com" \
-  obscura mcp --http --host 0.0.0.0
+  incord-browser mcp --http --host 0.0.0.0
 ```
 
 ## Tools exposed
@@ -100,20 +100,20 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) o
 ```json
 {
   "mcpServers": {
-    "obscura": {
-      "command": "/path/to/obscura",
+    "incord-browser": {
+      "command": "/path/to/incord-browser",
       "args": ["mcp"]
     }
   }
 }
 ```
 
-Restart Claude Desktop. The obscura tools appear in the tool list.
+Restart Claude Desktop. The Incord Browser tools appear in the tool list.
 
 ## Claude Code
 
 ```bash
-claude mcp add obscura /path/to/obscura mcp
+claude mcp add incord-browser /path/to/incord-browser mcp
 ```
 
 ## With stealth in config
@@ -121,8 +121,8 @@ claude mcp add obscura /path/to/obscura mcp
 ```json
 {
   "mcpServers": {
-    "obscura": {
-      "command": "/path/to/obscura",
+    "incord-browser": {
+      "command": "/path/to/incord-browser",
       "args": ["mcp", "--stealth"]
     }
   }

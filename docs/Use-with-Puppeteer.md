@@ -1,7 +1,7 @@
 ## Setup
 
 ```bash
-obscura serve --port 9222
+incord-browser serve --port 9222
 npm install puppeteer-core
 ```
 
@@ -159,7 +159,7 @@ Frames are activity-driven page captures, not fixed-rate desktop video.
 ## Disconnect
 
 ```js
-await browser.disconnect();  // leaves obscura serve running
+await browser.disconnect();  // leaves incord-browser serve running
 ```
 
 ## Current limits

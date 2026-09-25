@@ -343,7 +343,7 @@ pub async fn start_with_serve_options_and_limit(
         .set_nonblocking(true)
         .map_err(|e| anyhow::anyhow!("set_nonblocking: {}", e))?;
 
-    info!("Obscura CDP server listening on ws://{}:{}", host, port);
+    info!("Incord Browser CDP server listening on ws://{}:{}", host, port);
     info!(
         "DevTools endpoint: ws://{}:{}/devtools/browser",
         host, port

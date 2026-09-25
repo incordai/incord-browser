@@ -49,9 +49,9 @@ async fn my_test() {
 ## Logging
 
 ```bash
-RUST_LOG=obscura=info  obscura serve
-RUST_LOG=obscura=debug obscura serve
-RUST_LOG=obscura_cdp=trace,obscura_browser=debug obscura serve
+RUST_LOG=obscura=info  incord-browser serve
+RUST_LOG=obscura=debug incord-browser serve
+RUST_LOG=obscura_cdp=trace,obscura_browser=debug incord-browser serve
 ```
 
 Logs go to stderr.
@@ -61,7 +61,7 @@ Logs go to stderr.
 ## Driving the CDP server manually
 
 ```bash
-obscura serve --port 9222 --verbose
+incord-browser serve --port 9222 --verbose
 ```
 
 In another shell:
@@ -111,9 +111,9 @@ real-site suite at both the top and bottom of pages:
 
 ```bash
 RUN_ROOT="$(mktemp -d)"
-OBSCURA_BIN=./target/release/obscura render-repros/run.sh "$RUN_ROOT/fixtures"
-OBSCURA_BIN=./target/release/obscura render-repros/representative-suite/run.sh "$RUN_ROOT/top"
-OBSCURA_BIN=./target/release/obscura render-repros/representative-suite/run.sh "$RUN_ROOT/bottom" bottom
+OBSCURA_BIN=./target/release/incord-browser render-repros/run.sh "$RUN_ROOT/fixtures"
+OBSCURA_BIN=./target/release/incord-browser render-repros/representative-suite/run.sh "$RUN_ROOT/top"
+OBSCURA_BIN=./target/release/incord-browser render-repros/representative-suite/run.sh "$RUN_ROOT/bottom" bottom
 ```
 
 Set `BASELINE_BIN` or `CHROMIUM_BIN` when producing paired captures. Keep the
@@ -129,21 +129,21 @@ CPU with `perf` and a flamegraph:
 
 ```bash
 cargo build --release --features render
-perf record -F 99 -g -- ./target/release/obscura fetch https://heavy-spa.example
+perf record -F 99 -g -- ./target/release/incord-browser fetch https://heavy-spa.example
 perf script | flamegraph.pl > flame.svg
 ```
 
 Memory with heaptrack:
 
 ```bash
-heaptrack ./target/release/obscura serve
+heaptrack ./target/release/incord-browser serve
 ```
 
 Tokio task inspection:
 
 ```bash
 RUSTFLAGS="--cfg tokio_unstable" cargo build --release --features render
-./target/release/obscura serve
+./target/release/incord-browser serve
 # in another shell
 tokio-console
 ```

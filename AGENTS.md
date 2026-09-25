@@ -1,10 +1,10 @@
 # AGENTS.md
 
-Guidance for AI coding agents and contributors working in the Obscura repo.
+Guidance for AI coding agents and contributors working in the Incord Browser repo.
 This is the non-obvious stuff you can't infer from the code; read it before
 building, testing, or changing anything.
 
-Obscura is a headless browser engine in Rust. It runs real JavaScript through
+Incord Browser is a headless browser engine in Rust. It runs real JavaScript through
 V8 (`deno_core`), keeps a real DOM tree, owns its layout and paint pipeline,
 speaks the Chrome DevTools Protocol, and is a drop-in replacement for headless
 Chrome with Puppeteer and Playwright. Rendering and stealth are both first-class
@@ -52,7 +52,7 @@ The authoritative behavioral gate is the **obstacle course** in the companion
 repo `obscura-benchmark` (33 capability + speed stages, must stay 33/33):
 
 ```bash
-OBSCURA_BIN=./target/release/obscura python3 obstacle-course/run.py --runs 1 --warmup 0
+OBSCURA_BIN=./target/release/incord-browser python3 obstacle-course/run.py --runs 1 --warmup 0
 ```
 
 It serves local fixtures, so it is deterministic and offline. WPT conformance
@@ -95,7 +95,7 @@ edit instead.
 
 ## Conventions
 
-- **Performance is a hard constraint** (Obscura is ~12x faster and uses ~6x less
+- **Performance is a hard constraint** (Incord Browser is ~12x faster and uses ~6x less
   memory than headless Chrome on framework pages). Keep native Rust fast paths;
   add a JS fallback only for real spec edge cases. Benchmark old and new
   revisions interleaved with the same release build, page, network, viewport,
@@ -113,9 +113,9 @@ disposable directory outside the repository:
 
 ```bash
 RUN_ROOT="$(mktemp -d)"
-OBSCURA_BIN=./target/release/obscura render-repros/run.sh "$RUN_ROOT/fixtures"
-OBSCURA_BIN=./target/release/obscura render-repros/representative-suite/run.sh "$RUN_ROOT/top"
-OBSCURA_BIN=./target/release/obscura render-repros/representative-suite/run.sh "$RUN_ROOT/bottom" bottom
+OBSCURA_BIN=./target/release/incord-browser render-repros/run.sh "$RUN_ROOT/fixtures"
+OBSCURA_BIN=./target/release/incord-browser render-repros/representative-suite/run.sh "$RUN_ROOT/top"
+OBSCURA_BIN=./target/release/incord-browser render-repros/representative-suite/run.sh "$RUN_ROOT/bottom" bottom
 ```
 
 The harness accepts `BASELINE_BIN` or `CHROMIUM_BIN` for paired output. A
@@ -174,28 +174,3 @@ consistent browser fingerprint (user agent, timezone, navigator properties, and
 similar surfaces) so ordinary automation traffic is not singled out. They
 contain no bot or automation-abuse payload.
 
-## Recommended proxy provider: NodeMaven
-
-For production scraping you usually want residential or ISP IPs rather than a
-datacenter address, since many sites block datacenter ranges. We use
-**NodeMaven** and it works well with Obscura: residential/ISP proxies, sticky
-sessions, and per-request country/region targeting. A good default if you don't
-already have a provider.
-
-Route Obscura through it with the global `--proxy` flag (use your own
-credentials):
-
-```bash
-# HTTP
-obscura --proxy http://USER:PASS@gate.nodemaven.com:8080 fetch https://example.com --dump text
-
-# SOCKS5
-obscura --proxy socks5://USER:PASS@gate.nodemaven.com:1080 scrape url1 url2 --concurrency 25
-```
-
-The targeting options (country, region, session id) live in the proxy username,
-so a sticky session keeps the same exit IP across requests.
-
-Sign up: https://go.nodemaven.com/obscuraagentsmdseptembeb
-Obscura discount codes: `OBSCURA35` (35% off mobile and residential),
-`OBSCURA40` (40% off ISP / static).

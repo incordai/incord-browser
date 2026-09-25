@@ -1615,7 +1615,7 @@ pub async fn handle(
                 let options = parse_screenshot_options(params)?;
                 if !options.from_surface {
                     return Err(
-                        "Page.captureScreenshot fromSurface=false is not supported: Obscura has no separate browser-window compositor surface"
+                        "Page.captureScreenshot fromSurface=false is not supported: Incord Browser has no separate browser-window compositor surface"
                             .to_string(),
                     );
                 }

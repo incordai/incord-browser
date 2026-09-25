@@ -3,7 +3,7 @@
 # Usage: ./run.sh [outdir]   (default: ./out)
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-BIN="${OBSCURA_BIN:-$ROOT/target/release/obscura}"
+BIN="${OBSCURA_BIN:-$ROOT/target/release/incord-browser}"
 CHROME="${CHROME_BIN:-}"
 PYTHON="${PYTHON_BIN:-python3}"
 DIR="$(cd "$(dirname "$0")" && pwd)"

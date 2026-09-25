@@ -16,7 +16,7 @@ fn screenshot_keeps_outset_shadow_outside_transparent_border_box() {
         "background:lime;box-shadow:4px 4px 0 black\"></div>",
         "</body></html>"
     );
-    let output = Command::new(env!("CARGO_BIN_EXE_obscura"))
+    let output = Command::new(env!("CARGO_BIN_EXE_incord-browser"))
         .args(["fetch", url, "--screenshot"])
         .arg(&path)
         .args(["--wait", "0", "--timeout", "5", "--quiet"])

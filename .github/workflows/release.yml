@@ -19,14 +19,14 @@ jobs:
             # common LTS servers with glibc 2.35 instead of requiring the
             # newer glibc shipped by ubuntu-latest.
             os: ubuntu-22.04
-            name: obscura-x86_64-linux
+            name: incord-browser-x86_64-linux
           - target: aarch64-unknown-linux-gnu
             # Native build on GitHub's ARM runner.
             os: ubuntu-22.04-arm
-            name: obscura-aarch64-linux
+            name: incord-browser-aarch64-linux
           - target: aarch64-apple-darwin
             os: macos-latest
-            name: obscura-aarch64-macos
+            name: incord-browser-aarch64-macos
           - target: x86_64-apple-darwin
             # Must run on a native Intel runner. obscura-js bakes a V8 startup
             # snapshot at build time, and that snapshot is architecture specific.
@@ -36,10 +36,10 @@ jobs:
             # image (available until Aug 2027); there is no cross-build that
             # produces a correct snapshot.
             os: macos-15-intel
-            name: obscura-x86_64-macos
+            name: incord-browser-x86_64-macos
           - target: x86_64-pc-windows-msvc
             os: windows-latest
-            name: obscura-x86_64-windows
+            name: incord-browser-x86_64-windows
 
     runs-on: ${{ matrix.os }}
 
@@ -84,10 +84,10 @@ jobs:
         run: |
           BIN_DIR=target/${{ matrix.target }}/release-dist
           mkdir -p dist/no-render
-          if [ -f "$BIN_DIR/obscura.exe" ]; then
-            cp "$BIN_DIR/obscura.exe" "$BIN_DIR/obscura-worker.exe" dist/no-render/
+          if [ -f "$BIN_DIR/incord-browser.exe" ]; then
+            cp "$BIN_DIR/incord-browser.exe" "$BIN_DIR/incord-browser-worker.exe" dist/no-render/
           else
-            cp "$BIN_DIR/obscura" "$BIN_DIR/obscura-worker" dist/no-render/
+            cp "$BIN_DIR/incord-browser" "$BIN_DIR/incord-browser-worker" dist/no-render/
           fi
 
       - name: Build no-render stealth release binary
@@ -98,10 +98,10 @@ jobs:
         run: |
           BIN_DIR=target/${{ matrix.target }}/release-dist
           mkdir -p dist/no-render-stealth
-          if [ -f "$BIN_DIR/obscura.exe" ]; then
-            cp "$BIN_DIR/obscura.exe" "$BIN_DIR/obscura-worker.exe" dist/no-render-stealth/
+          if [ -f "$BIN_DIR/incord-browser.exe" ]; then
+            cp "$BIN_DIR/incord-browser.exe" "$BIN_DIR/incord-browser-worker.exe" dist/no-render-stealth/
           else
-            cp "$BIN_DIR/obscura" "$BIN_DIR/obscura-worker" dist/no-render-stealth/
+            cp "$BIN_DIR/incord-browser" "$BIN_DIR/incord-browser-worker" dist/no-render-stealth/
           fi
 
       - name: Build render-enabled release binary
@@ -112,10 +112,10 @@ jobs:
         run: |
           BIN_DIR=target/${{ matrix.target }}/release-dist
           mkdir -p dist/default
-          if [ -f "$BIN_DIR/obscura.exe" ]; then
-            cp "$BIN_DIR/obscura.exe" "$BIN_DIR/obscura-worker.exe" dist/default/
+          if [ -f "$BIN_DIR/incord-browser.exe" ]; then
+            cp "$BIN_DIR/incord-browser.exe" "$BIN_DIR/incord-browser-worker.exe" dist/default/
           else
-            cp "$BIN_DIR/obscura" "$BIN_DIR/obscura-worker" dist/default/
+            cp "$BIN_DIR/incord-browser" "$BIN_DIR/incord-browser-worker" dist/default/
           fi
 
       - name: Build render-enabled stealth release binary
@@ -126,10 +126,10 @@ jobs:
         run: |
           BIN_DIR=target/${{ matrix.target }}/release-dist
           mkdir -p dist/stealth
-          if [ -f "$BIN_DIR/obscura.exe" ]; then
-            cp "$BIN_DIR/obscura.exe" "$BIN_DIR/obscura-worker.exe" dist/stealth/
+          if [ -f "$BIN_DIR/incord-browser.exe" ]; then
+            cp "$BIN_DIR/incord-browser.exe" "$BIN_DIR/incord-browser-worker.exe" dist/stealth/
           else
-            cp "$BIN_DIR/obscura" "$BIN_DIR/obscura-worker" dist/stealth/
+            cp "$BIN_DIR/incord-browser" "$BIN_DIR/incord-browser-worker" dist/stealth/
           fi
 
       - name: Smoke test release binaries (V8 snapshot)
@@ -140,19 +140,19 @@ jobs:
         shell: bash
         run: |
           for VARIANT in default stealth no-render no-render-stealth; do
-            BIN=dist/$VARIANT/obscura
+            BIN=dist/$VARIANT/incord-browser
             [ -f "$BIN.exe" ] && BIN="$BIN.exe"
             "$BIN" fetch "data:text/html,<title>ok</title>" --eval "1+1"
           done
           for VARIANT in default stealth; do
-            BIN=dist/$VARIANT/obscura
+            BIN=dist/$VARIANT/incord-browser
             [ -f "$BIN.exe" ] && BIN="$BIN.exe"
             "$BIN" fetch "data:text/html,<style>body{margin:0;background:%23123456}</style>" --screenshot smoke.png
             test -s smoke.png
             rm smoke.png
           done
           for VARIANT in no-render no-render-stealth; do
-            BIN=dist/$VARIANT/obscura
+            BIN=dist/$VARIANT/incord-browser
             [ -f "$BIN.exe" ] && BIN="$BIN.exe"
             if "$BIN" fetch "data:text/html,<title>no-render</title>" --screenshot smoke.png; then
               echo "$VARIANT unexpectedly supports screenshots" >&2
@@ -164,22 +164,22 @@ jobs:
       - name: Package (Unix)
         if: runner.os != 'Windows'
         run: |
-          tar czf ${{ matrix.name }}.tar.gz -C dist/default obscura obscura-worker
-          tar czf ${{ matrix.name }}-stealth.tar.gz -C dist/stealth obscura obscura-worker
-          tar czf ${{ matrix.name }}-no-render.tar.gz -C dist/no-render obscura obscura-worker
-          tar czf ${{ matrix.name }}-no-render-stealth.tar.gz -C dist/no-render-stealth obscura obscura-worker
+          tar czf ${{ matrix.name }}.tar.gz -C dist/default incord-browser incord-browser-worker
+          tar czf ${{ matrix.name }}-stealth.tar.gz -C dist/stealth incord-browser incord-browser-worker
+          tar czf ${{ matrix.name }}-no-render.tar.gz -C dist/no-render incord-browser incord-browser-worker
+          tar czf ${{ matrix.name }}-no-render-stealth.tar.gz -C dist/no-render-stealth incord-browser incord-browser-worker
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
         run: |
           cd dist/default
-          7z a ../../${{ matrix.name }}.zip obscura.exe obscura-worker.exe
+          7z a ../../${{ matrix.name }}.zip incord-browser.exe incord-browser-worker.exe
           cd ../stealth
-          7z a ../../${{ matrix.name }}-stealth.zip obscura.exe obscura-worker.exe
+          7z a ../../${{ matrix.name }}-stealth.zip incord-browser.exe incord-browser-worker.exe
           cd ../no-render
-          7z a ../../${{ matrix.name }}-no-render.zip obscura.exe obscura-worker.exe
+          7z a ../../${{ matrix.name }}-no-render.zip incord-browser.exe incord-browser-worker.exe
           cd ../no-render-stealth
-          7z a ../../${{ matrix.name }}-no-render-stealth.zip obscura.exe obscura-worker.exe
+          7z a ../../${{ matrix.name }}-no-render-stealth.zip incord-browser.exe incord-browser-worker.exe
 
       - name: Upload packaged binaries
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

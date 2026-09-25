@@ -1,13 +1,13 @@
-# Contributing to Obscura
+# Contributing to Incord Browser
 
-Thanks for your interest in Obscura. This guide covers how to build, test, and
+Thanks for your interest in Incord Browser. This guide covers how to build, test, and
 submit changes. For the deeper, non-obvious engine details (architecture,
 gotchas, robustness invariants), read [AGENTS.md](AGENTS.md) first; this file
 does not repeat it.
 
 ## Code of conduct
 
-Be respectful and constructive. We want Obscura to be a welcoming project, so
+Be respectful and constructive. We want Incord Browser to be a welcoming project, so
 keep discussion focused on the work and assume good faith. Harassment or abuse
 is not tolerated.
 
@@ -29,7 +29,7 @@ A few notes to keep the project maintainable:
 
 ## Building
 
-Obscura supports four release configurations. Keep all four building when you
+Incord Browser supports four release configurations. Keep all four building when you
 change feature gates or shared code:
 
 | Configuration | Command |
@@ -46,7 +46,7 @@ and PDF output.
 
 ```bash
 cargo build --release -p obscura-cli --bins --features render
-# binary at ./target/release/obscura
+# binary at ./target/release/incord-browser
 ```
 
 - The first build compiles V8 from source: roughly 5 minutes and a few GB of
@@ -82,7 +82,7 @@ repo [`obscura-benchmark`](https://github.com/h4ckf0r0day/obscura-benchmark)
 (33 capability and speed stages, must stay 33/33):
 
 ```bash
-OBSCURA_BIN=./target/release/obscura python3 obstacle-course/run.py --runs 1 --warmup 0
+OBSCURA_BIN=./target/release/incord-browser python3 obstacle-course/run.py --runs 1 --warmup 0
 ```
 
 It serves local fixtures, so it is deterministic and offline.
@@ -110,7 +110,7 @@ changes:
 1. Add or update a small deterministic fixture in `render-repros/` that
    isolates the behavior.
 2. Build the render binary, then run `render-repros/run.sh`. This captures each
-   fixture in Obscura and Chromium and runs the structural checks.
+   fixture in Incord Browser and Chromium and runs the structural checks.
 3. Run `render-repros/representative-suite/run.sh <new-output-dir>` at the top
    of the configured pages, then run it again with `bottom` as the second
    argument. The output directory must not already exist.
@@ -138,7 +138,7 @@ For any code change:
 2. The full render-feature nextest command above passes.
 3. `CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=2 cargo build --release -p obscura-cli --bins --features render` compiles clean.
 4. The obstacle course still reports **33/33**.
-5. **Performance is a hard constraint.** Obscura is roughly 12x faster and uses
+5. **Performance is a hard constraint.** Incord Browser is roughly 12x faster and uses
    about 6x less memory than headless Chrome on framework pages. Keep native
    Rust fast paths and add a JS fallback only for real spec edge cases. If your
    change could affect performance, benchmark old and new revisions interleaved
@@ -190,7 +190,7 @@ Fixes #316.
 
 Open an issue with enough detail to reproduce:
 
-- The obscura version or commit, plus OS and architecture.
+- The Incord Browser version or commit, plus OS and architecture.
 - The build configuration: render, render and stealth, no-render, or no-render
   and stealth.
 - A repro: a URL, an `--eval` snippet, or a short CDP sequence.
@@ -210,7 +210,7 @@ for private reporting.
 
 ## Scope and direction
 
-Obscura targets web scraping and AI-agent automation, and is heading toward a
+Incord Browser targets web scraping and AI-agent automation, and is heading toward a
 hosted cloud scraping service. The priorities are real-world render success and
 robustness (no crashes or hangs). Conformance and new Web APIs are welcome when
 they do not regress performance or stability.

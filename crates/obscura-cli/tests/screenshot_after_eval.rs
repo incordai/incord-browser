@@ -27,7 +27,7 @@ fn screenshot_is_captured_after_eval_scrolls_the_live_page() {
     );
 
     let run = |path: &std::path::Path, eval: Option<&str>| {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_obscura"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_incord-browser"));
         command
             .args(["fetch", url, "--screenshot"])
             .arg(path)
@@ -88,7 +88,7 @@ fn screenshots_use_live_animation_time_unless_harness_pins_a_sample() {
     );
 
     let run = |path: &std::path::Path, animation_time: Option<&str>| {
-        let mut command = Command::new(env!("CARGO_BIN_EXE_obscura"));
+        let mut command = Command::new(env!("CARGO_BIN_EXE_incord-browser"));
         command
             .args(["fetch", url, "--screenshot"])
             .arg(path)
@@ -134,7 +134,7 @@ fn paired_capture_reasserts_scroll_after_the_post_eval_settle() {
         "</body></html>"
     );
 
-    let output = Command::new(env!("CARGO_BIN_EXE_obscura"))
+    let output = Command::new(env!("CARGO_BIN_EXE_incord-browser"))
         .args(["fetch", url, "--screenshot"])
         .arg(&screenshot)
         .args([
@@ -189,7 +189,7 @@ fn paired_capture_evaluates_state_after_final_scroll_reassert() {
         "</body></html>"
     );
 
-    let output = Command::new(env!("CARGO_BIN_EXE_obscura"))
+    let output = Command::new(env!("CARGO_BIN_EXE_incord-browser"))
         .args(["fetch", url, "--screenshot"])
         .arg(&screenshot)
         .args([

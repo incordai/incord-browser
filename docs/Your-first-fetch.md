@@ -1,9 +1,9 @@
-`obscura fetch` loads a URL, runs its JavaScript, and prints the result.
+`incord-browser fetch` loads a URL, runs its JavaScript, and prints the result.
 
 ## Load a page
 
 ```bash
-obscura fetch https://example.com
+incord-browser fetch https://example.com
 ```
 
 Prints the rendered HTML.
@@ -11,7 +11,7 @@ Prints the rendered HTML.
 ## Run JavaScript with `--eval`
 
 ```bash
-obscura fetch https://example.com --eval "document.title"
+incord-browser fetch https://example.com --eval "document.title"
 ```
 
 ```
@@ -21,7 +21,7 @@ obscura fetch https://example.com --eval "document.title"
 Returns JSON:
 
 ```bash
-obscura fetch https://news.ycombinator.com \
+incord-browser fetch https://news.ycombinator.com \
   --eval "Array.from(document.querySelectorAll('.titleline a')).slice(0, 5).map(a => a.textContent)"
 ```
 
@@ -30,7 +30,7 @@ obscura fetch https://news.ycombinator.com \
 `--eval` evaluates one expression. For multiple statements, wrap in an IIFE:
 
 ```bash
-obscura fetch https://example.com --eval "(function(){
+incord-browser fetch https://example.com --eval "(function(){
   const links = document.querySelectorAll('a');
   return Array.from(links).map(a => a.href);
 })()"
@@ -43,7 +43,7 @@ A bare block starting with `const` or `let` returns `null` because V8 gives top-
 CLI default is `load`. For faster returns on slow sites:
 
 ```bash
-obscura fetch https://my-spa.example --wait-until domcontentloaded --eval "document.title"
+incord-browser fetch https://my-spa.example --wait-until domcontentloaded --eval "document.title"
 ```
 
 | Level              | Returns when                                  |
@@ -53,7 +53,7 @@ obscura fetch https://my-spa.example --wait-until domcontentloaded --eval "docum
 | `networkidle2`     | ≤2 network connections active for 500ms       |
 | `networkidle0`     | 0 network connections active for 500ms        |
 
-(When driving obscura via Puppeteer or Playwright the default is `domcontentloaded` to match client expectations.)
+(When driving Incord Browser via Puppeteer or Playwright the default is `domcontentloaded` to match client expectations.)
 
 ## Common flags
 

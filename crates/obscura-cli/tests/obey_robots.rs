@@ -74,7 +74,7 @@ fn serve(mut stream: TcpStream, paths: &Arc<Mutex<Vec<String>>>) {
 }
 
 fn obscura(args: &[&str]) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_obscura"))
+    Command::new(env!("CARGO_BIN_EXE_incord-browser"))
         .args(args)
         .output()
         .expect("run obscura CLI")
