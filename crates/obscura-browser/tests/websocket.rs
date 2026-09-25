@@ -91,10 +91,21 @@ async fn wait_for(page: &mut Page, expr: &str) -> serde_json::Value {
 
 #[tokio::test(flavor = "current_thread")]
 async fn websocket_round_trips_over_a_real_connection() {
+    round_trip(false).await;
+}
+
+/// Stealth routes the socket through the wreq client (Chrome TLS fingerprint).
+#[cfg(feature = "stealth")]
+#[tokio::test(flavor = "current_thread")]
+async fn websocket_round_trips_through_the_stealth_client() {
+    round_trip(true).await;
+}
+
+async fn round_trip(stealth: bool) {
     std::env::set_var("OBSCURA_ALLOW_PRIVATE_NETWORK", "1");
     let page_url = spawn_page_server();
     let ws_port = spawn_ws_server().await;
-    let ctx = Arc::new(BrowserContext::with_storage_and_network("ws".into(), None, false, None, None, true));
+    let ctx = Arc::new(BrowserContext::with_storage_and_network("ws".into(), None, stealth, None, None, true));
     let mut page = Page::new("ws-page".into(), ctx);
     page.navigate(&format!("{page_url}/")).await.unwrap();
 
@@ -134,27 +145,35 @@ async fn websocket_round_trips_over_a_real_connection() {
     let events = page.take_websocket_events();
     let methods: Vec<&str> = events.iter().map(|(m, _)| m.as_str()).collect();
     assert_eq!(
-        methods,
+        methods[..3],
         [
             "Network.webSocketCreated",
             "Network.webSocketWillSendHandshakeRequest",
             "Network.webSocketHandshakeResponseReceived",
-            "Network.webSocketFrameReceived",
-            "Network.webSocketFrameSent",
-            "Network.webSocketFrameSent",
-            "Network.webSocketFrameReceived",
-            "Network.webSocketFrameReceived",
-            "Network.webSocketFrameSent",
-            "Network.webSocketFrameSent",
-            "Network.webSocketFrameReceived",
-            "Network.webSocketClosed",
         ]
     );
+    assert_eq!(methods.last(), Some(&"Network.webSocketClosed"));
     assert!(events.iter().all(|(_, p)| p["requestId"] == json!("ws-1")));
     assert_eq!(events[2].1["response"]["status"], json!(101));
-    assert_eq!(events[4].1["response"]["payloadData"], json!("hello"));
-    assert_eq!(events[5].1["response"]["opcode"], json!(2));
-    assert_eq!(events[5].1["response"]["payloadData"], json!("BwgJ"));
+    // Sent and received frames interleave by timing; each direction is ordered.
+    let frames = |method: &str| -> Vec<(u64, String)> {
+        events
+            .iter()
+            .filter(|(m, _)| m == method)
+            .map(|(_, p)| {
+                let r = &p["response"];
+                (r["opcode"].as_u64().unwrap(), r["payloadData"].as_str().unwrap().to_string())
+            })
+            .collect()
+    };
+    assert_eq!(
+        frames("Network.webSocketFrameSent"),
+        [(1, "hello".into()), (2, "BwgJ".into()), (2, "ZnJvbS1ibG9i".into()), (1, "bye".into())]
+    );
+    let received = frames("Network.webSocketFrameReceived");
+    assert_eq!(received.len(), 4);
+    assert!(received[0].1.starts_with("cookie=sid=abc"));
+    assert_eq!(received[1..], [(1, "hello".into()), (2, "BwgJ".into()), (2, "ZnJvbS1ibG9i".into())]);
 }
 
 #[tokio::test(flavor = "current_thread")]
