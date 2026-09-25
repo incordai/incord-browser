@@ -11187,32 +11187,67 @@ globalThis.reportError = globalThis.reportError || ((e) => console.error(e));
 // backing map. Plain prototype methods alone could not intercept direct
 // property access, so `localStorage.foo = x` never updated length before.
 globalThis.Storage = function Storage() {};
-Storage.prototype.getItem = function(k) { k = String(k); return Object.prototype.hasOwnProperty.call(this._data, k) ? this._data[k] : null; };
-Storage.prototype.setItem = function(k, v) { this._data[String(k)] = String(v); };
-Storage.prototype.removeItem = function(k) { delete this._data[String(k)]; };
-Storage.prototype.clear = function() { const d = this._data; for (const k in d) delete d[k]; };
-Storage.prototype.key = function(i) { const ks = Object.keys(this._data); i = i >>> 0; return i < ks.length ? ks[i] : null; };
-Object.defineProperty(Storage.prototype, 'length', { get: function() { return Object.keys(this._data).length; }, configurable: true });
+// Areas are backed by the browser context (localStorage, shared by every page
+// of the origin and persisted with --storage-dir) and by the tab
+// (sessionStorage, kept across navigations). The origin is derived natively
+// from the calling document. A bare runtime with no page falls back to a
+// realm-local map.
+const _stBacked = () => { try { return __obscuraCore.ops.op_storage_available(); } catch (e) { return false; } };
+const _stHas = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+Storage.prototype._keys = function() {
+  if (_stBacked()) return JSON.parse(__obscuraCore.ops.op_storage_keys(this._kind));
+  return Object.keys(this._data);
+};
+Storage.prototype.getItem = function(k) {
+  k = String(k);
+  if (_stBacked()) return JSON.parse(__obscuraCore.ops.op_storage_get(this._kind, k));
+  return _stHas(this._data, k) ? this._data[k] : null;
+};
+Storage.prototype.setItem = function(k, v) {
+  k = String(k); v = String(v);
+  if (_stBacked()) {
+    if (!__obscuraCore.ops.op_storage_set(this._kind, k, v)) {
+      throw new DOMException("Failed to execute 'setItem' on 'Storage': Setting the value of '" + k + "' exceeded the quota.", 'QuotaExceededError');
+    }
+    return;
+  }
+  this._data[k] = v;
+};
+Storage.prototype.removeItem = function(k) {
+  k = String(k);
+  if (_stBacked()) { __obscuraCore.ops.op_storage_remove(this._kind, k); return; }
+  delete this._data[k];
+};
+Storage.prototype.clear = function() {
+  if (_stBacked()) { __obscuraCore.ops.op_storage_clear(this._kind); return; }
+  const d = this._data; for (const k in d) delete d[k];
+};
+Storage.prototype.key = function(i) { const ks = this._keys(); i = i >>> 0; return i < ks.length ? ks[i] : null; };
+Object.defineProperty(Storage.prototype, 'length', { get: function() { return this._keys().length; }, configurable: true });
+Object.defineProperty(Storage.prototype, '_keys', { enumerable: false });
 
-const _mkStore = () => {
+const _mkStore = (kind) => {
   const target = Object.create(Storage.prototype);
   Object.defineProperty(target, '_data', { value: Object.create(null), writable: true, enumerable: false, configurable: true });
-  const isReal = (p) => p === '_data' || p === 'constructor' || (p in Storage.prototype);
+  Object.defineProperty(target, '_kind', { value: kind, writable: false, enumerable: false, configurable: true });
+  const isReal = (p) => p === '_data' || p === '_kind' || p === 'constructor' || (p in Storage.prototype);
   return new Proxy(target, {
     get(t, p, recv) { if (typeof p === 'symbol' || isReal(p)) return Reflect.get(t, p, recv); const v = t.getItem(p); return v === null ? undefined : v; },
     set(t, p, v, recv) { if (typeof p === 'symbol' || isReal(p)) return Reflect.set(t, p, v, recv); t.setItem(p, v); return true; },
-    has(t, p) { if (typeof p === 'symbol' || isReal(p)) return true; return Object.prototype.hasOwnProperty.call(t._data, p); },
+    has(t, p) { if (typeof p === 'symbol' || isReal(p)) return true; return t.getItem(p) !== null; },
     deleteProperty(t, p) { if (typeof p === 'symbol' || isReal(p)) return Reflect.deleteProperty(t, p); t.removeItem(p); return true; },
-    ownKeys(t) { return Object.keys(t._data); },
+    ownKeys(t) { return t._keys(); },
     getOwnPropertyDescriptor(t, p) {
-      if (typeof p !== 'symbol' && Object.prototype.hasOwnProperty.call(t._data, p))
-        return { value: t._data[p], writable: true, enumerable: true, configurable: true };
+      if (typeof p !== 'symbol' && !isReal(p)) {
+        const v = t.getItem(p);
+        if (v !== null) return { value: v, writable: true, enumerable: true, configurable: true };
+      }
       return Reflect.getOwnPropertyDescriptor(t, p);
     },
   });
 };
-globalThis.localStorage = _mkStore();
-globalThis.sessionStorage = _mkStore();
+globalThis.localStorage = _mkStore(0);
+globalThis.sessionStorage = _mkStore(1);
 
 globalThis.btoa = globalThis.btoa || ((s) => { s = String(s); const b = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) { const cp = s.charCodeAt(i); if (cp > 0xFF) throw new DOMException("The string to be encoded contains characters outside of the Latin1 range.", "InvalidCharacterError"); b[i] = cp; } const c="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"; let r=""; for(let i=0;i<b.length;i+=3){const a=b[i],bb=b[i+1]??0,cc=b[i+2]??0; r+=c[a>>2]+c[((a&3)<<4)|(bb>>4)]+(i+1<b.length?c[((bb&15)<<2)|(cc>>6)]:"=")+(i+2<b.length?c[cc&63]:"=");} return r; });
 globalThis.atob = globalThis.atob || ((s) => {

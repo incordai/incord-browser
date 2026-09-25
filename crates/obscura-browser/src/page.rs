@@ -229,6 +229,8 @@ pub struct Page {
     pub js: Option<ObscuraJsRuntime>,
     pub lifecycle: LifecycleState,
     pub http_client: Arc<ObscuraHttpClient>,
+    /// Backing store for this tab's `sessionStorage`, kept across navigations.
+    pub session_storage: Arc<obscura_net::WebStorage>,
     pub context: Arc<BrowserContext>,
     pub title: String,
     /// Source document URL for the current document. This is deliberately
@@ -1076,6 +1078,7 @@ impl Page {
         };
 
         Page {
+            session_storage: Arc::new(obscura_net::WebStorage::new()),
             id,
             frame_id,
             url: None,
@@ -1793,6 +1796,7 @@ impl Page {
         );
 
         rt.set_cookie_jar(self.context.cookie_jar.clone());
+        rt.set_web_storage(self.context.web_storage.clone(), self.session_storage.clone());
         rt.set_http_client(self.http_client.clone());
         rt.set_callbacks(self.callbacks.clone());
         rt.set_blocked_urls(self.blocked_url_patterns.clone());
