@@ -4715,16 +4715,23 @@ fn paint_laid_dom_scrolled(
             if let Some(marker) = list_marker_text(tree, nid, style.list_style) {
                 let fsize = style.font_size.unwrap_or(16.0);
                 let color = style.color.unwrap_or([0, 0, 0, 255]);
-                let mw = measure_text(&marker, fsize, false, style.font_family.as_deref());
+                // ab_glyph's PxScale is the ascent-to-descent height, not the
+                // em size, so convert to match the item text. The marker then
+                // sits on the first line's baseline: the glyph box is centred
+                // in the line box, as for the text it labels.
+                let line_height = crate::inline::used_line_height(style);
+                let (marker_scale, baseline, ascent) =
+                    marker_metrics(fsize, line_height, style.font_family.as_deref());
+                let mw = measure_text(&marker, marker_scale, false, style.font_family.as_deref());
                 let mx = rect.x + style.padding.left - mw - 6.0;
-                let my = rect.y + style.border.top + style.padding.top;
+                let my = rect.y + style.border.top + style.padding.top + baseline - ascent;
                 draw_text(
                     &mut pixmap,
                     &marker,
                     mx,
                     my,
                     color,
-                    fsize,
+                    marker_scale,
                     false,
                     style.font_family.as_deref(),
                     style.letter_spacing.unwrap_or(0.0),
@@ -7014,6 +7021,30 @@ fn fallback_font_bytes(family: Option<&str>) -> &'static [u8] {
         }
     }
     FONT_BYTES
+}
+
+/// For a list marker at CSS `font_size` in a line box `line_height` tall:
+/// the `draw_text` size (ab_glyph's PxScale is the ascent-to-descent height,
+/// not the em size), the first line's baseline offset from the line top, and
+/// the unrounded ascent `draw_text` adds to its y. The baseline mirrors the
+/// text engine: grid-fitted ascent and descent, centred in the line box with
+/// the half-leading rounded down to a whole pixel.
+fn marker_metrics(font_size: f32, line_height: f32, family: Option<&str>) -> (f32, f32, f32) {
+    let fallback = (font_size, line_height * 0.8, font_size * 0.8);
+    let Ok(font) = FontRef::try_from_slice(fallback_font_bytes(family)) else {
+        return fallback;
+    };
+    let units_per_em = font.units_per_em().unwrap_or(1000.0);
+    let height = font.height_unscaled();
+    if units_per_em <= 0.0 || height <= 0.0 {
+        return fallback;
+    }
+    let em = font_size / units_per_em;
+    let ascent = font.ascent_unscaled() * em;
+    let descent = -font.descent_unscaled() * em;
+    let (ascent_fit, descent_fit) = (ascent.round(), descent.round());
+    let baseline = ((line_height - ascent_fit - descent_fit) / 2.0).floor() + ascent_fit;
+    (height * em, baseline, ascent)
 }
 
 pub fn measure_text(text: &str, size: f32, is_bold: bool, family: Option<&str>) -> f32 {
@@ -12696,6 +12727,41 @@ mod tests {
         assert_eq!(outside.red(), 255);
         assert_eq!(outside.green(), 255);
         assert_eq!(outside.blue(), 255);
+    }
+
+    /// Inked rows (min, max) of dark pixels within columns `x0..x1`.
+    fn inked_rows(pixmap: &Pixmap, x0: u32, x1: u32) -> Option<(u32, u32)> {
+        let rows: Vec<u32> = (0..pixmap.height())
+            .filter(|&y| {
+                (x0..x1).any(|x| pixmap.pixel(x, y).is_some_and(|p| p.red() < 140))
+            })
+            .collect();
+        Some((*rows.first()?, *rows.last()?))
+    }
+
+    #[test]
+    fn list_markers_match_the_item_text_size_and_baseline() {
+        for size in [13, 16, 18, 24, 32] {
+            // The item's own text repeats the marker, so both runs have the
+            // same glyphs and must ink the same rows.
+            let tree = parse_html(&format!(
+                "<html style=\"background:white\"><body style=\"margin:0\">\
+                 <ol style=\"font:{size}px serif;margin:0;padding-left:60px\"><li>1.</li></ol>\
+                 </body></html>"
+            ));
+            let pixmap = paint_dom(&tree, (200.0, 80.0), None).expect("pixmap");
+            let marker = inked_rows(&pixmap, 0, 58).expect("marker ink");
+            let text = inked_rows(&pixmap, 60, 200).expect("text ink");
+            assert_eq!(
+                marker.1, text.1,
+                "{size}px: marker baseline row {marker:?} vs text {text:?}"
+            );
+            let (mh, th) = (marker.1 - marker.0, text.1 - text.0);
+            assert!(
+                mh + 1 >= th && mh <= th + 1,
+                "{size}px: marker height {mh} vs text height {th}"
+            );
+        }
     }
 
     #[test]
