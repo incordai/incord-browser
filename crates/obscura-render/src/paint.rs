@@ -4167,6 +4167,7 @@ fn paint_laid_dom_scrolled(
             width: rect.width,
             height: rect.height,
         };
+        let rect = table_box_without_captions(tree, laid, nid, rect, (ox, oy));
 
         // Ancestor `overflow: hidden` clip, if any. Skip painting entirely
         // once the box has no visible overlap with it (this is what makes the
@@ -5795,6 +5796,46 @@ fn effective_border_styles(style: &crate::LayoutStyle) -> crate::Sides<crate::Bo
         styles.left = crate::BorderStyle::Solid;
     }
     styles
+}
+
+/// A `<table>`'s layout rect spans its captions (as the CSS table wrapper
+/// box does), but its own background and border belong to the table box
+/// between them.
+fn table_box_without_captions(
+    tree: &DomTree,
+    laid: &crate::dom::DomLayout,
+    nid: obscura_dom::NodeId,
+    rect: crate::Rect,
+    offset: (f32, f32),
+) -> crate::Rect {
+    let is_table = tree
+        .get_node(nid)
+        .and_then(|n| n.as_element().map(|e| e.local.as_ref() == "table"))
+        .unwrap_or(false);
+    if !is_table {
+        return rect;
+    }
+    let (mut top, mut bottom) = (rect.y, rect.y + rect.height);
+    for child in tree.children(nid) {
+        let is_caption = tree
+            .get_node(child)
+            .and_then(|n| n.as_element().map(|e| e.local.as_ref() == "caption"))
+            .unwrap_or(false);
+        let (Some(cap), Some(cap_style)) = (laid.rects.get(&child), laid.styles.get(&child)) else {
+            continue;
+        };
+        if !is_caption || cap_style.display == crate::Display::None {
+            continue;
+        }
+        let cap_top = cap.y + offset.1;
+        let cap_bottom = cap_top + cap.height;
+        if cap_style.caption_bottom.unwrap_or(false) {
+            bottom = bottom.min(cap_top);
+        } else {
+            top = top.max(cap_bottom);
+        }
+    }
+    crate::Rect { x: rect.x, y: top, width: rect.width, height: (bottom - top).max(0.0) }
 }
 
 fn paint_css_border(
