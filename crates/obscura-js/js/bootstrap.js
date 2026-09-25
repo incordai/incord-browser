@@ -270,22 +270,30 @@ function _innerText(el) {
   const kids = el.childNodes || [];
   for (let i = 0; i < kids.length; i++) walk(kids[i], self.ws, self.visibility !== 'hidden');
   // Assemble: collapse spaces across item boundaries, drop spaces at line
-  // edges, and turn runs of break counts into max(count) newlines.
-  let out = '';
+  // edges, and turn runs of break counts into max(count) newlines. Linear:
+  // only the last chunk is ever trimmed.
+  const parts = [];
+  let last = '';
   let pending = 0;
-  let started = false;
+  const trimTail = () => {
+    while (parts.length) {
+      const p = parts[parts.length - 1];
+      const t = p.replace(/ +$/, '');
+      if (t.length) { parts[parts.length - 1] = t; last = t[t.length - 1]; return; }
+      parts.pop();
+    }
+    last = '';
+  };
   for (const it of items) {
-    if (typeof it === 'number') { if (started) pending = Math.max(pending, it); continue; }
+    if (typeof it === 'number') { if (parts.length) pending = Math.max(pending, it); continue; }
     let t = it.t;
-    if (!it.pre) {
-      if (pending || out === '' || out.endsWith(' ') || out.endsWith('\n') || out.endsWith('\t')) t = t.replace(/^ /, '');
-      if (t === '') continue;
-    } else if (t === '') continue;
-    if (pending) { out = out.replace(/ +$/, '') + '\n'.repeat(pending); pending = 0; }
-    out += t;
-    started = true;
+    if (!it.pre && (pending || last === '' || last === ' ' || last === '\n' || last === '\t')) t = t.replace(/^ /, '');
+    if (t === '') continue;
+    if (pending) { trimTail(); parts.push('\n'.repeat(pending)); pending = 0; }
+    parts.push(t);
+    last = t[t.length - 1];
   }
-  return out.replace(/ +(?=\n)/g, '').replace(/ +$/, '');
+  return parts.join('').replace(/ +(?=\n)/g, '').replace(/ +$/, '');
 }
 function _setInnerText(el, v) {
   v = v === null ? '' : String(v);
