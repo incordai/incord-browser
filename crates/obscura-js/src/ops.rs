@@ -5116,6 +5116,39 @@ fn op_storage_keys(scope: &mut v8::PinScope, state: &OpState, kind: u32) -> Stri
     serde_json::to_string(&keys).unwrap_or_else(|_| "[]".to_string())
 }
 
+/// IndexedDB snapshot for `name` in the calling realm's origin, or "".
+#[op2]
+#[string]
+fn op_idb_get(scope: &mut v8::PinScope, state: &OpState, #[string] name: String) -> String {
+    storage_area(scope, state, 0)
+        .and_then(|(store, origin)| store.idb_get(&origin, &name))
+        .unwrap_or_default()
+}
+
+#[op2(fast)]
+fn op_idb_put(scope: &mut v8::PinScope, state: &OpState, #[string] name: &str, #[string] snapshot: &str) {
+    if let Some((store, origin)) = storage_area(scope, state, 0) {
+        store.idb_put(&origin, name, snapshot);
+    }
+}
+
+#[op2(fast)]
+fn op_idb_delete(scope: &mut v8::PinScope, state: &OpState, #[string] name: &str) {
+    if let Some((store, origin)) = storage_area(scope, state, 0) {
+        store.idb_delete(&origin, name);
+    }
+}
+
+/// JSON array of the origin's database names.
+#[op2]
+#[string]
+fn op_idb_names(scope: &mut v8::PinScope, state: &OpState) -> String {
+    let names = storage_area(scope, state, 0)
+        .map(|(store, origin)| store.idb_names(&origin))
+        .unwrap_or_default();
+    serde_json::to_string(&names).unwrap_or_else(|_| "[]".to_string())
+}
+
 /// Whether the realm has a backing store. Without one (a bare runtime with no
 /// page), the JS shim keeps a realm-local map instead.
 #[op2(fast)]
@@ -6190,6 +6223,10 @@ pub fn build_extension() -> Extension {
         op_storage_clear(),
         op_storage_keys(),
         op_storage_available(),
+        op_idb_get(),
+        op_idb_put(),
+        op_idb_delete(),
+        op_idb_names(),
         crate::ws_ops::op_ws_open(),
         crate::ws_ops::op_ws_send_text(),
         crate::ws_ops::op_ws_send_binary(),
