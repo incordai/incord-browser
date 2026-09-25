@@ -338,6 +338,11 @@ pub fn ua_style(tag: &str) -> LayoutStyle {
         // deliberately oversized art whose height and intrinsic ratio
         // establish its width.
         style.display = Display::Inline;
+    } else if tag == "svg" {
+        // An outer `<svg>` in HTML is an inline-level replaced element like
+        // `<img>`, so `text-align` places it and it sits on the text baseline.
+        // Its descendants are painted by the SVG renderer, not laid out.
+        style.display = Display::Inline;
     }
     style
 }

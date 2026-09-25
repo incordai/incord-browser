@@ -10491,6 +10491,7 @@ fn render_svg_with_font_database(
     opts.default_size = usvg::Size::from_wh(width as f32, height as f32)?;
     opts.font_family = "Liberation Serif".to_string();
     opts.fontdb = std::sync::Arc::clone(fonts);
+    opts.font_resolver = svg_font_resolver();
     let tree = usvg::Tree::from_data(&viewport_svg, &opts).ok()?;
     let size = tree.size();
     if size.width() <= 0.0 || size.height() <= 0.0 {
@@ -10508,6 +10509,58 @@ fn render_svg_with_font_database(
 /// with SVG-heavy navigation and would be prohibitive for future repeated
 /// frame capture. The embedded faces are the same stable browser-generic
 /// families used by the HTML text engine.
+/// usvg's font selection, with named families that are not in the database
+/// (`font-family="Arial"`) mapped to the bundled face HTML text uses for the
+/// same name, so SVG text matches the page instead of falling back to serif.
+/// The author's name is still tried first, so a loaded web font wins.
+fn svg_font_resolver<'a>() -> usvg::FontResolver<'a> {
+    use usvg::fontdb::Family;
+    usvg::FontResolver {
+        select_font: Box::new(|font, fontdb| {
+            let mut names = Vec::new();
+            for family in font.families() {
+                match family {
+                    usvg::FontFamily::Serif => names.push(Family::Serif),
+                    usvg::FontFamily::SansSerif => names.push(Family::SansSerif),
+                    usvg::FontFamily::Cursive => names.push(Family::Cursive),
+                    usvg::FontFamily::Fantasy => names.push(Family::Fantasy),
+                    usvg::FontFamily::Monospace => names.push(Family::Monospace),
+                    usvg::FontFamily::Named(name) => {
+                        names.push(Family::Name(name));
+                        if let Some(bundled) = crate::inline::bundled_family_for_css_token(name) {
+                            names.push(Family::Name(bundled));
+                        }
+                    }
+                }
+            }
+            names.push(Family::Serif);
+            let stretch = match font.stretch() {
+                usvg::FontStretch::UltraCondensed => usvg::fontdb::Stretch::UltraCondensed,
+                usvg::FontStretch::ExtraCondensed => usvg::fontdb::Stretch::ExtraCondensed,
+                usvg::FontStretch::Condensed => usvg::fontdb::Stretch::Condensed,
+                usvg::FontStretch::SemiCondensed => usvg::fontdb::Stretch::SemiCondensed,
+                usvg::FontStretch::Normal => usvg::fontdb::Stretch::Normal,
+                usvg::FontStretch::SemiExpanded => usvg::fontdb::Stretch::SemiExpanded,
+                usvg::FontStretch::Expanded => usvg::fontdb::Stretch::Expanded,
+                usvg::FontStretch::ExtraExpanded => usvg::fontdb::Stretch::ExtraExpanded,
+                usvg::FontStretch::UltraExpanded => usvg::fontdb::Stretch::UltraExpanded,
+            };
+            let style = match font.style() {
+                usvg::FontStyle::Normal => usvg::fontdb::Style::Normal,
+                usvg::FontStyle::Italic => usvg::fontdb::Style::Italic,
+                usvg::FontStyle::Oblique => usvg::fontdb::Style::Oblique,
+            };
+            fontdb.query(&usvg::fontdb::Query {
+                families: &names,
+                weight: usvg::fontdb::Weight(font.weight()),
+                stretch,
+                style,
+            })
+        }),
+        select_fallback: usvg::FontResolver::default_fallback_selector(),
+    }
+}
+
 fn svg_font_database() -> std::sync::Arc<usvg::fontdb::Database> {
     static DATABASE: std::sync::OnceLock<std::sync::Arc<usvg::fontdb::Database>> =
         std::sync::OnceLock::new();

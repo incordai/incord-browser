@@ -13899,6 +13899,9 @@ fn inline_wraps_only_in_flow_blocks(
     };
     if style.display != crate::Display::Inline
         || style.is_inline_block
+        // A replaced box (an inline `<svg>` whose `<rect>` children compute
+        // to block) is atomic; flattening it would drop its own box.
+        || style.is_replaced_box
         || style.before_pseudo.is_some()
         || style.after_pseudo.is_some()
         || style.float.is_some()
@@ -19487,6 +19490,22 @@ mod tests {
     }
 
     #[test]
+    fn inline_svg_is_placed_by_text_align() {
+        let tree = parse_html(
+            r#"<body style="margin:0">
+                <div style="text-align:center;width:400px"><svg id="alone" width="50" height="20"><rect width="50" height="20"/></svg></div>
+                <div style="text-align:center;width:400px">a <svg id="in-text" width="50" height="20"></svg> b</div>
+                </body>"#,
+        );
+        let laid = layout_dom(&tree, (500.0, 300.0));
+        let rect = |id: &str| laid.rects.get(&tree.query_selector(&format!("#{id}")).unwrap().unwrap()).copied();
+        let alone = rect("alone").expect("an SVG with child shapes keeps its own box");
+        assert_eq!((alone.x, alone.width, alone.height), (175.0, 50.0, 20.0));
+        let in_text = rect("in-text").unwrap();
+        assert!(in_text.x > 150.0 && in_text.x < 200.0, "centred with its text: {in_text:?}");
+    }
+
+    #[test]
     fn collapsed_table_borders_are_shared_between_cells() {
         let tree = parse_html(
             r#"<body style="margin:0"><table id="t" style="border-collapse:collapse">
@@ -21493,3 +21512,4 @@ mod tests {
         assert!(style.is_inline_block);
     }
 }
+
