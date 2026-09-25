@@ -6,6 +6,7 @@ pub mod robots;
 pub mod blocklist;
 pub mod proxy;
 pub mod web_storage;
+pub mod websocket;
 #[cfg(feature = "stealth")]
 pub mod wreq_client;
 
