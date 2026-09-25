@@ -4108,6 +4108,12 @@ impl Page {
     /// responseReceived for them (issue #406). Idempotent: the runtime's queue
     /// is drained, so calling this repeatedly does not duplicate events. The
     /// fetch-{N} request id is preserved so Network.getResponseBody resolves.
+    /// CDP `Network.webSocket*` events queued by page WebSockets since the
+    /// last call, as (method, params).
+    pub fn take_websocket_events(&mut self) -> Vec<(String, serde_json::Value)> {
+        self.js.as_ref().map(|js| js.take_ws_cdp_events()).unwrap_or_default()
+    }
+
     pub fn sync_js_network_events(&mut self) {
         let events = match self.js.as_ref() {
             Some(js) => js.take_js_network_events(),

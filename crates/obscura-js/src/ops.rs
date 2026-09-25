@@ -159,6 +159,9 @@ pub struct ObscuraState {
     // drained by the Page into its network_events so the CDP layer emits
     // Network.requestWillBeSent / responseReceived for them (issue #406).
     pub js_network_events: Vec<JsNetworkEvent>,
+    /// CDP Network.webSocket* events (method, params) from page WebSockets,
+    /// drained by the CDP layer. Capped like `js_network_events`.
+    pub ws_cdp_events: Vec<(String, serde_json::Value)>,
     // Frame documents that have been fetched and are waiting for a realm.
     // Building one needs the whole runtime, which an op cannot reach, so
     // `op_frame_document_ready` queues here and the Page drains it between
@@ -376,6 +379,7 @@ impl ObscuraState {
             network_response_body_counter: 0,
             fetched_urls: Vec::new(),
             js_network_events: Vec::new(),
+            ws_cdp_events: Vec::new(),
             pending_frames: Vec::new(),
             pending_frame_bytes: 0,
             frame_id_counter: 0,

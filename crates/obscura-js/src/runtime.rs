@@ -3956,6 +3956,10 @@ impl ObscuraJsRuntime {
     /// Drain the network events recorded for script-initiated requests
     /// (fetch/XHR/dynamic resource). The Page moves these into its own
     /// network_events so the CDP layer emits Network events for them (#406).
+    pub fn take_ws_cdp_events(&self) -> Vec<(String, serde_json::Value)> {
+        std::mem::take(&mut self.state.borrow_mut().ws_cdp_events)
+    }
+
     pub fn take_js_network_events(&self) -> Vec<crate::ops::JsNetworkEvent> {
         std::mem::take(&mut self.state.borrow_mut().js_network_events)
     }

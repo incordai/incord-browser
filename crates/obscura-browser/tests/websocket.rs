@@ -129,6 +129,32 @@ async fn websocket_round_trips_over_a_real_connection() {
             + &page_url.rsplit(':').next().unwrap().to_string()
             + ";ua=true | text:hello | bin:7.8.9 | bin:102.114.111.109.45.98.108.111.98 | close:4001:done:true:3"
     );
+
+    // The same traffic is reported to CDP clients as Network.webSocket* events.
+    let events = page.take_websocket_events();
+    let methods: Vec<&str> = events.iter().map(|(m, _)| m.as_str()).collect();
+    assert_eq!(
+        methods,
+        [
+            "Network.webSocketCreated",
+            "Network.webSocketWillSendHandshakeRequest",
+            "Network.webSocketHandshakeResponseReceived",
+            "Network.webSocketFrameReceived",
+            "Network.webSocketFrameSent",
+            "Network.webSocketFrameSent",
+            "Network.webSocketFrameReceived",
+            "Network.webSocketFrameReceived",
+            "Network.webSocketFrameSent",
+            "Network.webSocketFrameSent",
+            "Network.webSocketFrameReceived",
+            "Network.webSocketClosed",
+        ]
+    );
+    assert!(events.iter().all(|(_, p)| p["requestId"] == json!("ws-1")));
+    assert_eq!(events[2].1["response"]["status"], json!(101));
+    assert_eq!(events[4].1["response"]["payloadData"], json!("hello"));
+    assert_eq!(events[5].1["response"]["opcode"], json!(2));
+    assert_eq!(events[5].1["response"]["payloadData"], json!("BwgJ"));
 }
 
 #[tokio::test(flavor = "current_thread")]
