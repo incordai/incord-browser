@@ -22,6 +22,7 @@ const __obscuraCore = globalThis.Deno.core;
     '__obscura_objects', '__obscura_oid', '__obscura_ua',
     '__obscura_platform', '__obscura_ua_platform', '__obscura_ua_platform_version',
     '__obscura_stealth', '__obscura_markTrusted', '__obscura_core_handoff',
+    '__obscura_dispatchTouch', '__obscura_dispatchDrag',
     '__obscura_frameId', '__obscura_parentFrameId', '__obscura_frameWindows',
     '__obscura_frameObjects', '__obscura_frameElements', '__obscura_deliverMessage',
     '__obscura_liveFrameIds', '__obscura_forgetFrame',
@@ -68,6 +69,8 @@ const __obscuraCore = globalThis.Deno.core;
     'HTMLAudioElement', 'WebGL2RenderingContext',
     'SVGElement', 'SVGGraphicsElement', 'SVGGeometryElement', 'SVGPathElement',
     'SVGSVGElement',
+    'Touch', 'TouchList', 'TouchEvent', 'DataTransfer', 'DataTransferItem',
+    'DataTransferItemList', 'DragEvent',
   ];
   var _desc = { value: undefined, writable: true, enumerable: false, configurable: true };
   for (var _i = 0; _i < _names.length; _i++) {
@@ -5740,6 +5743,7 @@ class Document extends Node {
       'compositionevent': CompositionEvent,
       'wheelevent': WheelEvent,
       'pointerevent': PointerEvent,
+      'dragevent': DragEvent,
       'errorevent': ErrorEvent,
       'popstateevent': PopStateEvent,
       'animationevent': AnimationEvent,
@@ -10333,7 +10337,305 @@ globalThis.ProgressEvent = class ProgressEvent extends Event {
     this.total = i.total != null ? Number(i.total) : 0;
   }
 };
-globalThis.ClipboardEvent = class extends Event {};
+// Touch Events. Desktop Chrome exposes Touch, TouchList and TouchEvent (so
+// `new TouchEvent(...)` works) while reporting maxTouchPoints 0 and rejecting
+// document.createEvent('TouchEvent'); match that split.
+globalThis.Touch = class Touch {
+  constructor(init) {
+    if (!init || typeof init !== 'object' || init.identifier === undefined || !init.target) {
+      throw new TypeError("Failed to construct 'Touch': required member identifier/target is undefined.");
+    }
+    this.identifier = Number(init.identifier);
+    this.target = init.target;
+    this.clientX = +init.clientX || 0; this.clientY = +init.clientY || 0;
+    this.screenX = +init.screenX || 0; this.screenY = +init.screenY || 0;
+    this.pageX = init.pageX !== undefined ? +init.pageX : this.clientX + (globalThis.scrollX || 0);
+    this.pageY = init.pageY !== undefined ? +init.pageY : this.clientY + (globalThis.scrollY || 0);
+    this.radiusX = +init.radiusX || 0; this.radiusY = +init.radiusY || 0;
+    this.rotationAngle = +init.rotationAngle || 0;
+    this.force = +init.force || 0;
+    this.altitudeAngle = init.altitudeAngle !== undefined ? +init.altitudeAngle : Math.PI / 2;
+    this.azimuthAngle = +init.azimuthAngle || 0;
+    this.touchType = init.touchType === 'stylus' ? 'stylus' : 'direct';
+  }
+  get [Symbol.toStringTag]() { return 'Touch'; }
+};
+globalThis.TouchList = class TouchList {
+  constructor() { throw new TypeError('Illegal constructor'); }
+  get [Symbol.toStringTag]() { return 'TouchList'; }
+};
+const _makeTouchList = (touches) => {
+  const list = Object.create(TouchList.prototype);
+  const arr = Array.from(touches || []);
+  arr.forEach((t, i) => { list[i] = t; });
+  Object.defineProperty(list, 'length', { value: arr.length, enumerable: false });
+  list.item = (i) => (i >>> 0) < arr.length ? arr[i >>> 0] : null;
+  list[Symbol.iterator] = function* () { yield* arr; };
+  return list;
+};
+globalThis.TouchEvent = class TouchEvent extends UIEvent {
+  constructor(t, o = {}) {
+    super(t, o);
+    this.touches = _makeTouchList(o.touches);
+    this.targetTouches = _makeTouchList(o.targetTouches);
+    this.changedTouches = _makeTouchList(o.changedTouches);
+    this.altKey = !!o.altKey; this.metaKey = !!o.metaKey;
+    this.ctrlKey = !!o.ctrlKey; this.shiftKey = !!o.shiftKey;
+  }
+  get [Symbol.toStringTag]() { return 'TouchEvent'; }
+};
+
+// HTML drag-and-drop data store.
+globalThis.DataTransferItem = class DataTransferItem {
+  constructor() { throw new TypeError('Illegal constructor'); }
+  get [Symbol.toStringTag]() { return 'DataTransferItem'; }
+};
+globalThis.DataTransferItemList = class DataTransferItemList {
+  constructor() { throw new TypeError('Illegal constructor'); }
+  get [Symbol.toStringTag]() { return 'DataTransferItemList'; }
+};
+const _dtItem = (kind, type, value) => {
+  const item = Object.create(DataTransferItem.prototype);
+  Object.defineProperties(item, {
+    kind: { value: kind, enumerable: true },
+    type: { value: type, enumerable: true },
+  });
+  item.getAsString = (cb) => { if (kind === 'string' && typeof cb === 'function') setTimeout(() => cb(value), 0); };
+  item.getAsFile = () => (kind === 'file' ? value : null);
+  return item;
+};
+globalThis.DataTransfer = class DataTransfer {
+  constructor() {
+    const entries = [];
+    const dt = this;
+    let dropEffect = 'none';
+    let effectAllowed = 'uninitialized';
+    const norm = (f) => {
+      f = String(f).toLowerCase();
+      return f === 'text' ? 'text/plain' : f === 'url' ? 'text/uri-list' : f;
+    };
+    const list = Object.create(DataTransferItemList.prototype);
+    const syncIndexes = () => {
+      for (const k of Object.keys(list)) if (/^\d+$/.test(k)) delete list[k];
+      entries.forEach((e, i) => { list[i] = e.item; });
+    };
+    Object.defineProperty(list, 'length', { get: () => entries.length });
+    list.add = (data, type) => {
+      if (typeof File !== 'undefined' && data instanceof File) {
+        const e = { kind: 'file', type: data.type, value: data, item: _dtItem('file', data.type, data) };
+        entries.push(e); syncIndexes(); return e.item;
+      }
+      const t = norm(type);
+      if (entries.some((e) => e.kind === 'string' && e.type === t)) {
+        throw new DOMException("Failed to execute 'add' on 'DataTransferItemList': An item already exists for type '" + t + "'.", 'NotSupportedError');
+      }
+      const e = { kind: 'string', type: t, value: String(data), item: _dtItem('string', t, String(data)) };
+      entries.push(e); syncIndexes(); return e.item;
+    };
+    list.remove = (i) => { entries.splice(i >>> 0, 1); syncIndexes(); };
+    list.clear = () => { entries.length = 0; syncIndexes(); };
+    list[Symbol.iterator] = function* () { for (const e of entries) yield e.item; };
+    Object.defineProperties(this, {
+      items: { get: () => list, enumerable: true },
+      types: {
+        get: () => {
+          const t = entries.filter((e) => e.kind === 'string').map((e) => e.type);
+          if (entries.some((e) => e.kind === 'file')) t.push('Files');
+          return Object.freeze(t);
+        },
+        enumerable: true,
+      },
+      files: { get: () => _makeFileList(entries.filter((e) => e.kind === 'file').map((e) => e.value)), enumerable: true },
+      dropEffect: {
+        get: () => dropEffect,
+        set: (v) => { if (['none', 'copy', 'link', 'move'].includes(v)) dropEffect = v; },
+        enumerable: true,
+      },
+      effectAllowed: {
+        get: () => effectAllowed,
+        set: (v) => { if (['none', 'copy', 'copyLink', 'copyMove', 'link', 'linkMove', 'move', 'all', 'uninitialized'].includes(v)) effectAllowed = v; },
+        enumerable: true,
+      },
+    });
+    dt.setData = (format, data) => {
+      const t = norm(format);
+      const idx = entries.findIndex((e) => e.kind === 'string' && e.type === t);
+      if (idx >= 0) entries.splice(idx, 1);
+      const v = String(data);
+      entries.push({ kind: 'string', type: t, value: v, item: _dtItem('string', t, v) });
+      syncIndexes();
+    };
+    dt.getData = (format) => {
+      const t = norm(format);
+      const e = entries.find((x) => x.kind === 'string' && x.type === t);
+      if (!e) return '';
+      return String(format).toLowerCase() === 'url' ? (e.value.split(/\r?\n/).find((l) => l && l[0] !== '#') || '') : e.value;
+    };
+    dt.clearData = (format) => {
+      if (format === undefined) {
+        for (let i = entries.length - 1; i >= 0; i--) if (entries[i].kind === 'string') entries.splice(i, 1);
+      } else {
+        const t = norm(format);
+        const idx = entries.findIndex((e) => e.kind === 'string' && e.type === t);
+        if (idx >= 0) entries.splice(idx, 1);
+      }
+      syncIndexes();
+    };
+    dt.setDragImage = () => {};
+  }
+  get [Symbol.toStringTag]() { return 'DataTransfer'; }
+};
+globalThis.DragEvent = class DragEvent extends MouseEvent {
+  constructor(t, o = {}) {
+    super(t, o);
+    this.dataTransfer = o.dataTransfer instanceof DataTransfer ? o.dataTransfer : null;
+  }
+  get [Symbol.toStringTag]() { return 'DragEvent'; }
+};
+for (const _c of [Touch, TouchList, TouchEvent, DataTransferItem, DataTransferItemList, DataTransfer, DragEvent]) _markNative(_c);
+
+// CDP Input.dispatchTouchEvent. Each touch keeps the element it started on as
+// its target (Touch Events spec). Returns the taps no listener cancelled so
+// the CDP layer can deliver the compatibility mouse events and click, like
+// Chrome's gesture recognizer does under touch emulation.
+(function() {
+  const active = new Map();
+  const TAP_SLOP = 15;
+  const fire = (target, ev) => target.dispatchEvent(globalThis.__obscura_markTrusted(ev));
+  const mods = (m) => ({ altKey: !!(m & 1), ctrlKey: !!(m & 2), metaKey: !!(m & 4), shiftKey: !!(m & 8) });
+  const pointer = (type, rec, m, pressure) => new PointerEvent(type, Object.assign({
+    bubbles: type !== 'pointerenter' && type !== 'pointerleave', cancelable: type !== 'pointercancel', composed: true, view: globalThis,
+    clientX: rec.x, clientY: rec.y, pointerId: rec.pointerId, pointerType: 'touch', isPrimary: rec.primary,
+    button: type === 'pointerdown' || type === 'pointerup' ? 0 : -1, buttons: pressure > 0 ? 1 : 0,
+    width: rec.rx * 2 || 1, height: rec.ry * 2 || 1, pressure,
+  }, mods(m)));
+  const touchOf = (rec) => new Touch({
+    identifier: rec.id, target: rec.target, clientX: rec.x, clientY: rec.y, screenX: rec.x, screenY: rec.y,
+    radiusX: rec.rx, radiusY: rec.ry, rotationAngle: rec.angle, force: rec.force,
+  });
+  const touchEvent = (type, changed, m) => {
+    const all = [...active.values()].map(touchOf);
+    const changedTouches = changed.map(touchOf);
+    const byTarget = new Map();
+    for (const rec of changed) {
+      if (!byTarget.has(rec.target)) byTarget.set(rec.target, []);
+    }
+    let cancelled = false;
+    for (const target of byTarget.keys()) {
+      const ev = new TouchEvent(type, Object.assign({
+        bubbles: true, cancelable: type !== 'touchcancel', composed: true, view: globalThis,
+        touches: all, changedTouches,
+        targetTouches: all.filter((t) => t.target === target),
+      }, mods(m)));
+      if (!fire(target, ev)) cancelled = true;
+    }
+    return cancelled;
+  };
+  let nextPointerId = 2;
+  globalThis.__obscura_dispatchTouch = function(type, points, m) {
+    points = Array.isArray(points) ? points : [];
+    m = m | 0;
+    if (type === 'touchStart' || type === 'touchMove') {
+      const started = [], moved = [];
+      points.forEach((p, i) => {
+        const id = p.id !== undefined ? p.id : i;
+        const x = +p.x || 0, y = +p.y || 0;
+        const prev = active.get(id);
+        if (!prev) {
+          const target = (document.elementFromPoint && document.elementFromPoint(x, y)) || document.body || document.documentElement;
+          if (!target) return;
+          const rec = { id, target, x, y, sx: x, sy: y, rx: +p.radiusX || 1, ry: +p.radiusY || 1, angle: +p.rotationAngle || 0,
+            force: p.force !== undefined ? +p.force : 1, pointerId: nextPointerId++, primary: active.size === 0, prevented: false, moved: false };
+          active.set(id, rec);
+          started.push(rec);
+        } else if (prev.x !== x || prev.y !== y) {
+          prev.x = x; prev.y = y;
+          if (Math.hypot(x - prev.sx, y - prev.sy) > TAP_SLOP) prev.moved = true;
+          moved.push(prev);
+        }
+      });
+      for (const rec of started) {
+        fire(rec.target, pointer('pointerover', rec, m, rec.force));
+        fire(rec.target, pointer('pointerenter', rec, m, rec.force));
+        fire(rec.target, pointer('pointerdown', rec, m, rec.force));
+      }
+      if (started.length && touchEvent('touchstart', started, m)) started.forEach((r) => { r.prevented = true; });
+      for (const rec of moved) fire(rec.target, pointer('pointermove', rec, m, rec.force));
+      if (moved.length && touchEvent('touchmove', moved, m)) moved.forEach((r) => { r.prevented = true; });
+      return [];
+    }
+    if (type === 'touchEnd' || type === 'touchCancel') {
+      const keep = new Set(points.map((p, i) => (p.id !== undefined ? p.id : i)));
+      const ended = [...active.values()].filter((r) => !keep.has(r.id));
+      const cancel = type === 'touchCancel';
+      for (const rec of ended) {
+        fire(rec.target, pointer(cancel ? 'pointercancel' : 'pointerup', rec, m, 0));
+        fire(rec.target, pointer('pointerout', rec, m, 0));
+        fire(rec.target, pointer('pointerleave', rec, m, 0));
+      }
+      // The ended touches leave `touches` before the event fires.
+      ended.forEach((r) => active.delete(r.id));
+      const endCancelled = ended.length ? touchEvent(cancel ? 'touchcancel' : 'touchend', ended, m) : false;
+      if (cancel || endCancelled) return [];
+      // Taps the caller turns into mouse press/release (and so click and
+      // activation behavior) at the lift point.
+      return ended
+        .filter((rec) => rec.primary && !rec.moved && !rec.prevented)
+        .map((rec) => ({ x: rec.x, y: rec.y }));
+    }
+    return [];
+  };
+
+  // CDP Input.dispatchDragEvent: dragEnter / dragOver / drop / dragCancel at
+  // a point, carrying the drag data the client supplies.
+  let dragTarget = null;
+  const effectFor = (mask) => {
+    const copy = !!(mask & 1), link = !!(mask & 2), move = !!(mask & 16);
+    if (copy && link && move) return 'all';
+    if (copy && move) return 'copyMove';
+    if (copy && link) return 'copyLink';
+    if (link && move) return 'linkMove';
+    return copy ? 'copy' : link ? 'link' : move ? 'move' : 'none';
+  };
+  globalThis.__obscura_dispatchDrag = function(type, x, y, data, m) {
+    data = data || {};
+    const dt = new DataTransfer();
+    for (const item of data.items || []) {
+      try { dt.items.add(String(item.data), String(item.mimeType)); } catch (_e) {}
+    }
+    for (const path of data.files || []) {
+      try { dt.items.add(new File([], String(path).split(/[\\/]/).pop())); } catch (_e) {}
+    }
+    dt.effectAllowed = effectFor(data.dragOperationsMask === undefined ? 0xffff : data.dragOperationsMask);
+    const init = (t) => Object.assign({ bubbles: true, cancelable: t !== 'dragleave', composed: true, view: globalThis,
+      clientX: x, clientY: y, dataTransfer: dt }, mods(m | 0));
+    const target = (document.elementFromPoint && document.elementFromPoint(x, y)) || document.body || document.documentElement;
+    if (type === 'dragCancel') {
+      if (dragTarget) fire(dragTarget, new DragEvent('dragleave', init('dragleave')));
+      dragTarget = null;
+      return 'none';
+    }
+    if (!target) return 'none';
+    if (type === 'dragEnter' || (type === 'dragOver' && target !== dragTarget)) {
+      if (dragTarget && dragTarget !== target) fire(dragTarget, new DragEvent('dragleave', init('dragleave')));
+      dragTarget = target;
+      fire(target, new DragEvent('dragenter', init('dragenter')));
+    }
+    if (type === 'dragOver' || type === 'dragEnter') {
+      const accepted = !fire(target, new DragEvent('dragover', init('dragover')));
+      return accepted ? (dt.dropEffect === 'none' ? 'copy' : dt.dropEffect) : 'none';
+    }
+    if (type === 'drop') {
+      dragTarget = null;
+      fire(target, new DragEvent('drop', init('drop')));
+      return dt.dropEffect;
+    }
+    return 'none';
+  };
+})();
+globalThis.ClipboardEvent = class ClipboardEvent extends Event {
+  constructor(t, o = {}) { super(t, o); this.clipboardData = o.clipboardData instanceof DataTransfer ? o.clipboardData : null; }
+};
 globalThis.SubmitEvent = class extends Event {};
 
 // ToggleEvent backs the popover beforetoggle/toggle events. oldState and
