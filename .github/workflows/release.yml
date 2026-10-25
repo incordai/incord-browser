@@ -212,6 +212,14 @@ jobs:
           path: dist
           merge-multiple: true
 
+      # Installers check the archive they download against this file before
+      # unpacking it, so every asset must have a line here.
+      - name: Checksums
+        working-directory: dist
+        run: |
+          sha256sum obscura-* > SHA256SUMS
+          cat SHA256SUMS
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
